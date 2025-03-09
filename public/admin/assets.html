@@ -1,71 +1,630 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Assets - Shopify Digital Downloads Admin</title>
-  <link rel="stylesheet" type="text/css" href="/css/style.css">
+  <link rel="stylesheet" href="../css/auth.css">
+  <link rel="stylesheet" href="../css/admin.css">
+  <style>
+    /* Assets page specific styles */
+    .dropzone {
+      border: 2px dashed #e2e8f0;
+      border-radius: 16px;
+      padding: 40px;
+      text-align: center;
+      background-color: rgba(255, 255, 255, 0.6);
+      transition: all 0.3s ease;
+      margin-bottom: 24px;
+      cursor: pointer;
+    }
+    
+    .dropzone:hover, .dropzone.dragover {
+      border-color: #3b82f6;
+      background-color: rgba(239, 246, 255, 0.7);
+    }
+    
+    .dropzone-icon {
+      color: #64748b;
+      margin-bottom: 16px;
+      transition: color 0.3s ease;
+    }
+    
+    .dropzone:hover .dropzone-icon, .dropzone.dragover .dropzone-icon {
+      color: #3b82f6;
+    }
+    
+    .dropzone-text {
+      color: #64748b;
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+    
+    .dropzone-hint {
+      color: #94a3b8;
+      font-size: 14px;
+    }
+    
+    .file-input {
+      display: none;
+    }
+    
+    .action-buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    
+    .action-button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background-color: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      color: #64748b;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .action-button:hover {
+      background-color: #f8fafc;
+      border-color: #cbd5e1;
+    }
+    
+    .action-button.primary {
+      background-color: #3b82f6;
+      border-color: #3b82f6;
+      color: white;
+    }
+    
+    .action-button.primary:hover {
+      background-color: #2563eb;
+      border-color: #2563eb;
+    }
+    
+    .files-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 24px;
+    }
+    
+    .file-card {
+      background-color: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      transition: all 0.3s ease;
+      position: relative;
+    }
+    
+    .file-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .file-icon {
+      height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #f8fafc;
+      color: #64748b;
+    }
+    
+    .file-details {
+      padding: 16px;
+    }
+    
+    .file-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: #334155;
+      margin: 0 0 8px;
+      word-break: break-all;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    
+    .file-meta {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    
+    .file-actions {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    
+    .file-card:hover .file-actions {
+      opacity: 1;
+    }
+    
+    .file-action {
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      background-color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #64748b;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    
+    .file-action:hover {
+      background-color: #f1f5f9;
+      color: #3b82f6;
+    }
+    
+    .file-action.delete:hover {
+      background-color: #fef2f2;
+      color: #ef4444;
+    }
+    
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(255, 255, 255, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      backdrop-filter: blur(5px);
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.3s ease, visibility 0.3s;
+    }
+    
+    .loading-overlay.active {
+      visibility: visible;
+      opacity: 1;
+    }
+    
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 3px solid rgba(59, 130, 246, 0.2);
+      border-top-color: #3b82f6;
+      animation: spin 1s infinite linear;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    @media (max-width: 768px) {
+      .files-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 16px;
+      }
+      
+      .file-icon {
+        height: 100px;
+      }
+      
+      .dropzone {
+        padding: 24px;
+      }
+    }
+  </style>
 </head>
-<body>
-  <header>
-    <h1>Assets</h1>
-    <nav>
-      <a href="/admin/home">Home</a>
-      <a href="/admin/assets">Assets</a>
-      <a href="/admin/products">Products</a>
-      <a href="/admin/email-editor">Email Template</a>
-      <a href="/admin/smtp">SMTP Settings</a>
-      <a href="/logout">Logout</a>
-    </nav>
-  </header>
-  <div class="container">
-    <h2>Upload Digital File</h2>
-    <form id="uploadForm">
-      <input type="file" id="fileInput" name="file" required>
-      <button type="submit">Upload File</button>
-    </form>
-    <div id="uploadResult"></div>
-    <h2>Uploaded Assets</h2>
-    <button id="refreshFiles">Refresh Assets List</button>
-    <ul id="filesList"></ul>
+<body class="dashboard-body">
+  <div class="dashboard-container">
+    <div class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+          </svg>
+        </div>
+        <span class="logo-text">Shopify Digital</span>
+      </div>
+      
+      <nav class="nav-menu">
+        <a href="/admin/home" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+          <span>Home</span>
+        </a>
+        <a href="/admin/assets" class="nav-item active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+          </svg>
+          <span>Assets</span>
+        </a>
+        <a href="/admin/products" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="9" cy="21" r="1"></circle>
+            <circle cx="20" cy="21" r="1"></circle>
+            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+          </svg>
+          <span>Products</span>
+        </a>
+        <a href="/admin/email-editor" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          <span>Email Template</span>
+        </a>
+        <a href="/admin/smtp" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          <span>SMTP Settings</span>
+        </a>
+        <a href="/admin/orders" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"></line>
+            <line x1="8" y1="12" x2="21" y2="12"></line>
+            <line x1="8" y1="18" x2="21" y2="18"></line>
+            <line x1="3" y1="6" x2="3.01" y2="6"></line>
+            <line x1="3" y1="12" x2="3.01" y2="12"></line>
+            <line x1="3" y1="18" x2="3.01" y2="18"></line>
+          </svg>
+          <span>Orders</span>
+        </a>
+        <div class="nav-divider"></div>
+        <a href="/logout" class="nav-item logout">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          <span>Logout</span>
+        </a>
+      </nav>
+    </div>
+
+    <div class="main-content">
+      <div class="header">
+        <div class="welcome-message">
+          <h1>Assets</h1>
+          <p class="store-url">Manage your digital files</p>
+        </div>
+        <div class="user-menu">
+          <div class="user-avatar">JD</div>
+        </div>
+      </div>
+
+      <form id="uploadForm">
+        <div class="dropzone" id="dropzone">
+          <div class="dropzone-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </div>
+          <p class="dropzone-text">Drag and drop your file here, or click to browse</p>
+          <p class="dropzone-hint">Supports images, documents, audio, and video files</p>
+          <input type="file" id="fileInput" name="file" class="file-input" required>
+        </div>
+      </form>
+
+      <div class="action-buttons">
+        <button id="uploadButton" class="action-button primary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          Upload Selected Files
+        </button>
+        <button id="refreshFiles" class="action-button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 2v6h-6"></path>
+            <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+            <path d="M3 22v-6h6"></path>
+            <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+          </svg>
+          Refresh List
+        </button>
+      </div>
+
+      <div class="files-grid" id="filesList">
+        <!-- Files will be populated here by JavaScript -->
+      </div>
+      
+      <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+      </div>
+    </div>
   </div>
-  <footer>
-    &copy; 2025 Shopify Digital Downloads Admin
-  </footer>
+
   <script>
-    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+    // Dropzone functionality
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    
+    dropzone.addEventListener('click', () => {
+      fileInput.click();
+    });
+    
+    dropzone.addEventListener('dragover', (e) => {
       e.preventDefault();
-      const fileInput = document.getElementById('fileInput');
-      if (fileInput.files.length === 0) return alert('Please select a file.');
+      dropzone.classList.add('dragover');
+    });
+    
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+    
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        fileInput.files = e.dataTransfer.files;
+        // Update the dropzone text to show the file name
+        if (fileInput.files.length === 1) {
+          document.querySelector('.dropzone-text').textContent = `Selected: ${fileInput.files[0].name}`;
+        } else {
+          document.querySelector('.dropzone-text').textContent = `Selected: ${fileInput.files.length} files`;
+        }
+      }
+    });
+    
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length === 1) {
+        document.querySelector('.dropzone-text').textContent = `Selected: ${fileInput.files[0].name}`;
+      } else if (fileInput.files.length > 1) {
+        document.querySelector('.dropzone-text').textContent = `Selected: ${fileInput.files.length} files`;
+      }
+    });
+    
+    // Upload functionality
+    document.getElementById('uploadButton').addEventListener('click', async function() {
+      if (fileInput.files.length === 0) {
+        alert('Please select a file to upload.');
+        return;
+      }
+      
+      showLoading();
+      
       const formData = new FormData();
       formData.append('file', fileInput.files[0]);
+      
       try {
-        const response = await fetch('/api/upload', { method: 'POST', body: formData });
+        const response = await fetch('/api/upload', { 
+          method: 'POST', 
+          body: formData 
+        });
+        
         const data = await response.json();
-        document.getElementById('uploadResult').innerText = data.message;
+        
+        // Reset the form
+        document.querySelector('.dropzone-text').textContent = 'Drag and drop your file here, or click to browse';
+        fileInput.value = '';
+        
+        // Show success message
+        alert(data.message || 'File uploaded successfully!');
+        
+        // Reload the files list
         loadAssets();
       } catch (err) {
         console.error(err);
-        alert('Error uploading file.');
+        alert('Error uploading file. Please try again.');
+      } finally {
+        hideLoading();
       }
     });
+    
+    // Loading overlay functionality
+    function showLoading() {
+      document.getElementById('loadingOverlay').classList.add('active');
+    }
+    
+    function hideLoading() {
+      document.getElementById('loadingOverlay').classList.remove('active');
+    }
+    
+    // File icons by type
+    function getFileIcon(filename) {
+      const extension = filename.split('.').pop().toLowerCase();
+      
+      // Image files
+      if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(extension)) {
+        return `
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
+        `;
+      }
+      
+      // Document files
+      if (['pdf', 'doc', 'docx', 'txt', 'rtf', 'odt'].includes(extension)) {
+        return `
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+        `;
+      }
+      
+      // Audio files
+      if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(extension)) {
+        return `
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 18V5l12-2v13"></path>
+            <circle cx="6" cy="18" r="3"></circle>
+            <circle cx="18" cy="16" r="3"></circle>
+          </svg>
+        `;
+      }
+      
+      // Video files
+      if (['mp4', 'avi', 'mov', 'mkv', 'webm'].includes(extension)) {
+        return `
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+            <line x1="7" y1="2" x2="7" y2="22"></line>
+            <line x1="17" y1="2" x2="17" y2="22"></line>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <line x1="2" y1="7" x2="7" y2="7"></line>
+            <line x1="2" y1="17" x2="7" y2="17"></line>
+            <line x1="17" y1="17" x2="22" y2="17"></line>
+            <line x1="17" y1="7" x2="22" y2="7"></line>
+          </svg>
+        `;
+      }
+      
+      // Default file icon
+      return `
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+          <polyline points="13 2 13 9 20 9"></polyline>
+        </svg>
+      `;
+    }
+    
+    // Format file size
+    function formatFileSize(bytes) {
+      if (!bytes) return 'Unknown size';
+      
+      const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+      if (bytes === 0) return '0 Byte';
+      const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)));
+      return Math.round(bytes / Math.pow(1024, i), 2) + ' ' + sizes[i];
+    }
+    
+    // Load assets
     async function loadAssets() {
+      showLoading();
       try {
         const response = await fetch('/api/uploads');
         const data = await response.json();
+        
         const filesList = document.getElementById('filesList');
         filesList.innerHTML = '';
-        data.files.forEach(file => {
-          const li = document.createElement('li');
-          li.innerText = file;
-          filesList.appendChild(li);
-        });
+        
+        if (data.files && data.files.length > 0) {
+          data.files.forEach(file => {
+            // For demo, we'll add mock file sizes
+            const mockSize = Math.floor(Math.random() * 10000000);
+            const fileCard = document.createElement('div');
+            fileCard.className = 'file-card';
+            fileCard.innerHTML = `
+              <div class="file-icon">
+                ${getFileIcon(file)}
+              </div>
+              <div class="file-details">
+                <h3 class="file-name">${file}</h3>
+                <p class="file-meta">${formatFileSize(mockSize)}</p>
+              </div>
+              <div class="file-actions">
+                <div class="file-action" title="Download" onclick="window.location.href='/api/download/${file}'">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                </div>
+                <div class="file-action delete" title="Delete" onclick="deleteFile('${file}')">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                  </svg>
+                </div>
+              </div>
+            `;
+            
+            filesList.appendChild(fileCard);
+          });
+        } else {
+          filesList.innerHTML = `
+            <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #94a3b8;">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style="margin: 0 auto 16px;">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                <polyline points="13 2 13 9 20 9"></polyline>
+              </svg>
+              <p>No files uploaded yet. Upload your first file above.</p>
+            </div>
+          `;
+        }
       } catch (err) {
         console.error(err);
-        alert('Error fetching assets.');
+        document.getElementById('filesList').innerHTML = `
+          <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #ef4444;">
+            <p>Error loading files. Please try refreshing.</p>
+          </div>
+        `;
+      } finally {
+        hideLoading();
       }
     }
+    
+    // Delete file
+    async function deleteFile(filename) {
+      if (!confirm(`Are you sure you want to delete ${filename}?`)) {
+        return;
+      }
+      
+      showLoading();
+      
+      try {
+        const response = await fetch(`/api/delete/${filename}`, {
+          method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        alert(data.message || 'File deleted successfully!');
+        
+        // Reload assets
+        loadAssets();
+      } catch (err) {
+        console.error(err);
+        alert('Error deleting file. Please try again.');
+      } finally {
+        hideLoading();
+      }
+    }
+    
+    // Refresh files button
     document.getElementById('refreshFiles').addEventListener('click', loadAssets);
-    loadAssets();
+    
+    // Load files on page load
+    document.addEventListener('DOMContentLoaded', loadAssets);
+    
+    // Active nav item
+    document.addEventListener('DOMContentLoaded', function() {
+      const navItems = document.querySelectorAll('.nav-item');
+      navItems.forEach(item => {
+        item.addEventListener('click', function(e) {
+          navItems.forEach(i => i.classList.remove('active'));
+          this.classList.add('active');
+        });
+      });
+    });
   </script>
 </body>
 </html>

@@ -1,116 +1,473 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Orders - Shopify Digital Downloads Admin</title>
-  <link rel="stylesheet" type="text/css" href="/css/style.css">
+  <link rel="stylesheet" type="text/css" href="../css/auth.css">
+  <link rel="stylesheet" type="text/css" href="../css/admin.css">
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 20px;
-      background-color: #f4f4f4;
+    /* Orders page specific styles */
+    .orders-container {
+      max-width: 100%;
+      margin: 0 auto;
     }
-    .container {
-      max-width: 900px;
-      margin: auto;
-      background: white;
-      padding: 20px;
+    
+    .orders-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+    
+    .search-container {
+      position: relative;
+      max-width: 300px;
+      width: 100%;
+    }
+    
+    .search-container input {
+      width: 100%;
+      padding: 10px 16px 10px 40px;
       border-radius: 8px;
-      box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      background-color: white;
+      font-size: 14px;
     }
-    table {
+    
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #94a3b8;
+    }
+    
+    .orders-table-container {
+      background-color: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+      overflow: hidden;
+    }
+    
+    .orders-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 20px;
     }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 10px;
+    
+    .orders-table th {
+      background-color: #f8fafc;
+      font-weight: 600;
+      color: #64748b;
+      padding: 16px 20px;
       text-align: left;
+      border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+      font-size: 14px;
     }
-    th {
-      background-color: #0073e6;
-      color: white;
+    
+    .orders-table td {
+      padding: 16px 20px;
+      border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+      color: #475569;
+      font-size: 14px;
     }
-    tr:nth-child(even) {
-      background-color: #f9f9f9;
+    
+    .orders-table tr:last-child td {
+      border-bottom: none;
     }
-    a {
-      color: #0073e6;
+    
+    .orders-table tr:hover {
+      background-color: #f8fafc;
+    }
+    
+    .order-number {
+      font-weight: 600;
+      color: #3b82f6;
+    }
+    
+    .customer-link {
+      color: #475569;
       text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
-    a:hover {
-      text-decoration: underline;
+    
+    .customer-link:hover {
+      color: #3b82f6;
     }
-  </style>
-  <script>
-    async function loadOrders() {
-      try {
-        const response = await fetch('/admin/api/orders');
-        const data = await response.json();
-        const ordersTable = document.getElementById('ordersTableBody');
-        ordersTable.innerHTML = "";
-        data.orders.forEach(order => {
-          const row = document.createElement('tr');
-          row.innerHTML = `
-            <td>${order.order_number}</td>
-            <td>${order.ordered_date}</td>
-            <td><a href="${order.shopify_customer_url}" target="_blank">${order.customer_name}</a></td>
-            <td>${order.customer_email}</td>
-            <td>${formatDateTime(order.latest_dispatched_email)}</td>`;
-          ordersTable.appendChild(row);
-        });
-      } catch (err) {
-        console.error(err);
+    
+    .customer-link svg {
+      width: 14px;
+      height: 14px;
+      opacity: 0.7;
+    }
+    
+    .email-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .status-icon {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    
+    .status-sent {
+      background-color: #10b981;
+    }
+    
+    .status-not-sent {
+      background-color: #94a3b8;
+    }
+    
+    .empty-state {
+      padding: 60px 20px;
+      text-align: center;
+      color: #94a3b8;
+    }
+    
+    .empty-state-icon {
+      background-color: rgba(59, 130, 246, 0.1);
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      color: #3b82f6;
+    }
+    
+    .loading-indicator {
+      display: flex;
+      justify-content: center;
+      padding: 40px 0;
+    }
+    
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(59, 130, 246, 0.1);
+      border-radius: 50%;
+      border-top-color: #3b82f6;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    @media (max-width: 768px) {
+      .orders-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+      }
+      
+      .search-container {
+        max-width: 100%;
+      }
+      
+      .orders-table {
+        display: block;
+        overflow-x: auto;
+      }
+      
+      .orders-table thead {
+        display: none;
+      }
+      
+      .orders-table tbody {
+        display: block;
+        width: 100%;
+      }
+      
+      .orders-table tr {
+        display: block;
+        border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+        padding: 16px;
+      }
+      
+      .orders-table td {
+        display: flex;
+        padding: 8px 0;
+        border-bottom: none;
+        text-align: right;
+      }
+      
+      .orders-table td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        color: #64748b;
+        width: 40%;
+        text-align: left;
+        margin-right: auto;
       }
     }
+  </style>
+</head>
+<body class="dashboard-body">
+  <div class="dashboard-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+            <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+          </svg>
+        </div>
+        <span class="logo-text">Shopify Digital</span>
+      </div>
+      
+      <div class="nav-menu">
+        <a href="/admin/home" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+          Home
+        </a>
+        <a href="/admin/assets" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+          Assets
+        </a>
+        <a href="/admin/products" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m20.38 3.46 1.62 9.73-6.83 3.17-3.36-3.59-3.45 3.78-6.83-3.17 1.62-9.73"></path>
+            <path d="M12 22v-3"></path>
+            <path d="M10 13.46V7a2 2 0 0 1 4 0v6.46"></path>
+          </svg>
+          Products
+        </a>
+        <a href="/admin/orders" class="nav-item active">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="16" height="16" x="4" y="4" rx="2"></rect>
+            <rect width="4" height="4" x="9" y="9" rx="1"></rect>
+            <path d="M15 2v2"></path>
+            <path d="M15 20v2"></path>
+            <path d="M2 15h2"></path>
+            <path d="M20 15h2"></path>
+          </svg>
+          Orders
+        </a>
+        <a href="/admin/email-editor" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="16" height="13" x="4" y="5" rx="2"></rect>
+            <path d="m4 8 6.5 5.5a2 2 0 0 0 3 0L20 8"></path>
+          </svg>
+          Email Template
+        </a>
+        <a href="/admin/smtp" class="nav-item">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.2 8.4c.5.38.8.97.8 1.6v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V10a2 2 0 0 1 .8-1.6l8-6a2 2 0 0 1 2.4 0l8 6Z"></path>
+            <path d="m22 10-8.97 5.7a1.94 1.94 0 0 1-2.07 0L2 10"></path>
+          </svg>
+          SMTP Settings
+        </a>
+        
+        <div class="nav-divider"></div>
+        
+        <a href="/logout" class="nav-item logout">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          Logout
+        </a>
+      </div>
+    </div>
+    
+    <!-- Main content -->
+    <div class="main-content">
+      <!-- Header -->
+      <div class="header">
+        <div class="welcome-message">
+          <h1>Orders</h1>
+          <p class="store-url">Manage your customer orders</p>
+        </div>
+        <div class="user-avatar">SD</div>
+      </div>
+      
+      <!-- Orders Section -->
+      <div class="orders-container">
+        <div class="orders-header">
+          <h2 style="margin: 0; font-size: 18px; color: #1e293b;">Your Orders</h2>
+          <div class="search-container">
+            <div class="search-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.3-4.3"></path>
+              </svg>
+            </div>
+            <input type="text" id="orderSearch" placeholder="Search orders..." onkeyup="searchOrders()">
+          </div>
+        </div>
+        
+        <div class="orders-table-container">
+          <div id="loadingIndicator" class="loading-indicator">
+            <div class="loading-spinner"></div>
+          </div>
+          
+          <div id="emptyState" class="empty-state" style="display: none;">
+            <div class="empty-state-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="16" height="16" x="4" y="4" rx="2"></rect>
+                <rect width="4" height="4" x="9" y="9" rx="1"></rect>
+                <path d="M15 2v2"></path>
+                <path d="M15 20v2"></path>
+                <path d="M2 15h2"></path>
+                <path d="M20 15h2"></path>
+              </svg>
+            </div>
+            <h3>No orders found</h3>
+            <p>There are no orders to display at this time.</p>
+          </div>
+          
+          <table class="orders-table" id="ordersTable" style="display: none;">
+            <thead>
+              <tr>
+                <th>Order #</th>
+                <th>Ordered Date</th>
+                <th>Customer</th>
+                <th>Email</th>
+                <th>Latest Email</th>
+              </tr>
+            </thead>
+            <tbody id="ordersTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    let allOrders = [];
+    
+    async function loadOrders() {
+      try {
+        document.getElementById('loadingIndicator').style.display = 'flex';
+        document.getElementById('ordersTable').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'none';
+        
+        const response = await fetch('/admin/api/orders');
+        const data = await response.json();
+        allOrders = data.orders || [];
+        
+        // Hide loading indicator
+        document.getElementById('loadingIndicator').style.display = 'none';
+        
+        if (allOrders.length === 0) {
+          // Show empty state
+          document.getElementById('emptyState').style.display = 'block';
+        } else {
+          // Show table and render orders
+          document.getElementById('ordersTable').style.display = 'table';
+          renderOrders(allOrders);
+        }
+      } catch (err) {
+        console.error(err);
+        document.getElementById('loadingIndicator').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'block';
+        document.querySelector('#emptyState h3').textContent = 'Error loading orders';
+        document.querySelector('#emptyState p').textContent = 'There was a problem fetching your orders. Please try again later.';
+      }
+    }
+    
+    function renderOrders(orders) {
+      const ordersTable = document.getElementById('ordersTableBody');
+      ordersTable.innerHTML = "";
+      
+      orders.forEach(order => {
+        const hasEmail = order.latest_dispatched_email ? true : false;
+        const row = document.createElement('tr');
+        
+        row.innerHTML = `
+          <td data-label="Order #"><span class="order-number">${order.order_number}</span></td>
+          <td data-label="Ordered Date">${formatDate(order.ordered_date)}</td>
+          <td data-label="Customer">
+            <a href="${order.shopify_customer_url}" target="_blank" class="customer-link">
+              ${order.customer_name}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+            </a>
+          </td>
+          <td data-label="Email">${order.customer_email}</td>
+          <td data-label="Latest Email">
+            <div class="email-status">
+              <div class="status-icon ${hasEmail ? 'status-sent' : 'status-not-sent'}"></div>
+              ${formatDateTime(order.latest_dispatched_email)}
+            </div>
+          </td>
+        `;
+        
+        ordersTable.appendChild(row);
+      });
+    }
+    
+    function searchOrders() {
+      const searchTerm = document.getElementById('orderSearch').value.toLowerCase();
+      
+      if (!searchTerm) {
+        renderOrders(allOrders);
+        return;
+      }
+      
+      const filteredOrders = allOrders.filter(order => {
+        return (
+          order.order_number.toLowerCase().includes(searchTerm) ||
+          order.customer_name.toLowerCase().includes(searchTerm) ||
+          order.customer_email.toLowerCase().includes(searchTerm)
+        );
+      });
+      
+      if (filteredOrders.length === 0) {
+        document.getElementById('ordersTable').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'block';
+        document.querySelector('#emptyState h3').textContent = 'No matching orders';
+        document.querySelector('#emptyState p').textContent = 'Try a different search term.';
+      } else {
+        document.getElementById('ordersTable').style.display = 'table';
+        document.getElementById('emptyState').style.display = 'none';
+        renderOrders(filteredOrders);
+      }
+    }
+    
+    function formatDate(dateString) {
+      if (!dateString) return 'N/A';
+      const date = new Date(dateString);
+      return date.toLocaleDateString(undefined, { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric'
+      });
+    }
+    
     function formatDateTime(dateTimeString) {
-    if (!dateTimeString) return 'N/A';
-    const date = new Date(dateTimeString);
-    return date.toLocaleString(undefined, { 
+      if (!dateTimeString) return 'Not sent';
+      const date = new Date(dateTimeString);
+      return date.toLocaleString(undefined, { 
         weekday: 'short', 
         year: 'numeric', 
         month: 'short', 
         day: 'numeric', 
         hour: '2-digit', 
         minute: '2-digit' 
-    });
+      });
     }
-
+    
     window.onload = loadOrders;
   </script>
-</head>
-<body>
-  <header>
-    <h1>Orders</h1>
-    <nav>
-      <a href="/admin/home">Home</a>
-      <a href="/admin/assets">Assets</a>
-      <a href="/admin/products">Products</a>
-      <a href="/admin/email-editor">Email Template</a>
-      <a href="/admin/smtp">SMTP Settings</a>
-      <a href="/admin/orders">Orders</a>
-      <a href="/logout">Logout</a>
-    </nav>
-  </header>
-  <div class="container">
-    <h2>Your Orders</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Order #</th>
-          <th>Ordered Date</th>
-          <th>Customer</th>
-          <th>Email</th>
-          <th>Latest Dispatched Email</th>
-        </tr>
-      </thead>
-      <tbody id="ordersTableBody"></tbody>
-    </table>
-  </div>
-  <footer>
-    &copy; 2025 Shopify Digital Downloads Admin
-  </footer>
 </body>
 </html>

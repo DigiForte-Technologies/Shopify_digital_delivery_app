@@ -302,7 +302,7 @@ app.post('/admin/api/smtp', ensureAuthenticated, async (req, res) => {
 
 // ---------- File Upload & Assets API (Protected) ---------- //
 // Use the persistent volume mount point (default: /data/uploads)
-const persistentDir = process.env.PERSISTENT_DIR || '/data/uploads';
+const persistentDir = process.env.PERSISTENT_DIR || '/uploads';
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
