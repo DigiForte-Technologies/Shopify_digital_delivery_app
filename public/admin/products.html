@@ -398,8 +398,8 @@
         
         data.files.forEach(file => {
           const opt = document.createElement('option');
-          opt.value = 'uploads/' + file;
-          opt.text = file;
+          opt.value = 'uploads/' + file['s3_key'];
+          opt.text = file['s3_key'];
           assetSelect.appendChild(opt);
         });
       } catch (err) {
@@ -452,6 +452,7 @@
     // Update the product list UI
     function updateProductList(products) {
       const productList = document.getElementById('productList');
+      console.log(products)
       productList.innerHTML = '';
       
       // Filter products that have digital assets attached
@@ -496,7 +497,7 @@
       ];
       
       // Render each product card
-      demoProducts.forEach(product => {
+      productsWithAssets.forEach(product => {
         const productCard = document.createElement('div');
         productCard.className = 'product-card';
         
