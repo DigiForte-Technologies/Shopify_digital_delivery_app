@@ -154,11 +154,11 @@
             </div>
           </div>
           
-          <div class="form-group">
+          <!-- <div class="form-group">
             <label>
               <input type="checkbox" id="secureConnection"> Use Secure Connection (TLS/SSL)
             </label>
-          </div>
+          </div> -->
 
           <button type="submit" class="submit-button">Save SMTP Settings</button>
           
@@ -278,10 +278,10 @@
             document.getElementById('user').value = data.smtp.user || '';
             document.getElementById('pass').value = data.smtp.pass || '';
             
-            // If secure is defined, set the checkbox
-            if (data.smtp.secure !== undefined) {
-              document.getElementById('secureConnection').checked = data.smtp.secure;
-            }
+            // // If secure is defined, set the checkbox
+            // if (data.smtp.secure !== undefined) {
+            //   document.getElementById('secureConnection').checked = data.smtp.secure;
+            // }
           }
         })
         .catch(err => {
@@ -300,13 +300,13 @@
         const port = document.getElementById('port').value;
         const user = document.getElementById('user').value;
         const pass = document.getElementById('pass').value;
-        const secure = document.getElementById('secureConnection').checked;
+        // const secure = document.getElementById('secureConnection').checked;
         
         try {
           const response = await fetch('/admin/api/smtp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ host, port, user, pass, secure })
+            body: JSON.stringify({ host, port, user, pass })
           });
           
           const result = await response.json();
@@ -390,6 +390,26 @@
         }, 300);
       }, 5000);
     }
+    document.getElementById('testConnection').addEventListener('click', async function() {
+    this.classList.add('loading');
+
+    try {
+        const response = await fetch('/admin/api/smtp/test', { method: 'POST' });
+        const result = await response.json();
+
+        if (result.success) {
+            showResult(result.message || 'SMTP connection successful!', 'success');
+        } else {
+            showResult(result.message || 'SMTP connection failed.', 'error');
+        }
+    } catch (err) {
+        console.error('Error testing connection:', err);
+        showResult('Network error. Please try again.', 'error');
+    } finally {
+        this.classList.remove('loading');
+    }
+});
+
   </script>
 </body>
 </html>

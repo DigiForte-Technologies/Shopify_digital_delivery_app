@@ -321,7 +321,7 @@
           </div>
           <p class="dropzone-text">Drag and drop your file here, or click to browse</p>
           <p class="dropzone-hint">Supports images, documents, audio, and video files</p>
-          <input type="file" id="fileInput" name="file" class="file-input" required>
+          <input type="file" id="fileInput" name="file" class="file-input" multiple required>
         </div>
       </form>
 
@@ -397,40 +397,43 @@
     
     // Upload functionality
     document.getElementById('uploadButton').addEventListener('click', async function() {
-      if (fileInput.files.length === 0) {
-        alert('Please select a file to upload.');
-        return;
-      }
-      
-      showLoading();
-      
-      const formData = new FormData();
-      formData.append('file', fileInput.files[0]);
-      
-      try {
-        const response = await fetch('/api/upload', { 
-          method: 'POST', 
-          body: formData 
-        });
-        
-        const data = await response.json();
-        
-        // Reset the form
-        document.querySelector('.dropzone-text').textContent = 'Drag and drop your file here, or click to browse';
-        fileInput.value = '';
-        
-        // Show success message
-        alert(data.message || 'File uploaded successfully!');
-        
-        // Reload the files list
-        loadAssets();
-      } catch (err) {
-        console.error(err);
-        alert('Error uploading file. Please try again.');
-      } finally {
-        hideLoading();
-      }
-    });
+  if (fileInput.files.length === 0) {
+    alert('Please select at least one file to upload.');
+    return;
+  }
+  
+  showLoading();
+  
+  const files = fileInput.files;
+  let uploadedCount = 0;
+  
+  // Loop through each selected file
+  for (let i = 0; i < files.length; i++) {
+    const formData = new FormData();
+    formData.append('file', files[i]);
+    
+    try {
+      await fetch('/api/upload', { 
+        method: 'POST', 
+        body: formData 
+      });
+      uploadedCount++;
+    } catch (err) {
+      console.error(`Error uploading file ${files[i].name}:`, err);
+    }
+  }
+  
+  // Reset the form
+  document.querySelector('.dropzone-text').textContent = 'Drag and drop your file here, or click to browse';
+  fileInput.value = '';
+  
+  alert(`${uploadedCount} file(s) uploaded successfully!`);
+  
+  // Reload the files list
+  loadAssets();
+  hideLoading();
+});
+
     
     // Loading overlay functionality
     function showLoading() {

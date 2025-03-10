@@ -154,5 +154,60 @@
       }
     });
   </script>
+  <script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const errorMessage = urlParams.get("error");
+
+    if (errorMessage) {
+      const messageDiv = document.createElement("div");
+      messageDiv.style.backgroundColor = "rgba(239, 68, 68, 0.1)";
+      messageDiv.style.color = "#ef4444";
+      messageDiv.style.padding = "12px";
+      messageDiv.style.borderRadius = "8px";
+      messageDiv.style.textAlign = "center";
+      messageDiv.style.marginBottom = "16px";
+      messageDiv.style.fontWeight = "500";
+      messageDiv.innerText = errorMessage;
+      
+      const form = document.querySelector(".login-card");
+      if (form) {
+        form.insertBefore(messageDiv, form.firstChild);
+      }
+    }
+  });
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const message = urlParams.get("message");
+    const errorMessage = urlParams.get("error");
+
+    if (message || errorMessage) {
+      const messageDiv = document.createElement("div");
+      messageDiv.style.backgroundColor = message ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)";
+      messageDiv.style.color = message ? "#10b981" : "#ef4444";
+      messageDiv.style.padding = "12px";
+      messageDiv.style.borderRadius = "8px";
+      messageDiv.style.textAlign = "center";
+      messageDiv.style.marginBottom = "16px";
+      messageDiv.style.fontWeight = "500";
+      messageDiv.innerText = message || errorMessage;
+      
+      const form = document.querySelector(".login-card");
+      if (form) {
+        form.insertBefore(messageDiv, form.firstChild);
+      }
+
+      // If message exists (shop already exists), wait 3 seconds, then redirect
+      if (message) {
+        setTimeout(() => {
+          window.location.href = "/login";
+        }, 3000);
+      }
+    }
+  });
+</script>
+
 </body>
 </html>

@@ -206,5 +206,37 @@
       });
     });
   </script>
+  <script>
+    async function loadActivity() {
+      try {
+        const response = await fetch('/admin/api/activity');
+        const data = await response.json();
+        const activityList = document.querySelector('.activity-list');
+        activityList.innerHTML = ""; // Clear existing hardcoded items
+        data.activity.forEach(activity => {
+          const item = document.createElement('div');
+          item.className = "activity-item";
+          item.innerHTML = `
+            <div class="activity-icon ${activity.event_type.toLowerCase()}">
+              <!-- Optionally insert an SVG icon based on event_type -->
+            </div>
+            <div class="activity-details">
+              <p class="activity-text">${activity.message}</p>
+              <p class="activity-time">${new Date(activity.created_at).toLocaleString()}</p>
+            </div>
+          `;
+          activityList.appendChild(item);
+        });
+      } catch (err) {
+        console.error("Error loading recent activity:", err);
+      }
+    }
+    // Modify window.onload to call both loadStats and loadActivity:
+    window.onload = function() {
+      loadStats();
+      loadActivity();
+    }
+  </script>
+  
 </body>
 </html>

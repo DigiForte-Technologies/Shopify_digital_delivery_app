@@ -388,22 +388,48 @@ app.get('/signup', (req, res) => {
 
 // Process Sign-Up – new tenants register their shop details
 app.post('/signup', async (req, res) => {
-  const { username, password, shopify_store_url, shopify_api_password } = req.body;
+  let { username, password, shopify_store_url, shopify_api_password } = req.body;
+
   try {
+    // Ensure shopify_store_url is in proper <storename>.myshopify.com format
+    let refinedShopUrl = shopify_store_url
+      .replace(/https?:\/\//, '') // Remove http:// or https://
+      .replace(/\/$/, '') // Remove trailing slash
+      .toLowerCase(); // Normalize to lowercase
+
+    // Check if the URL matches the expected Shopify format
+    if (!/^[a-z0-9-]+\.myshopify\.com$/.test(refinedShopUrl)) {
+      return res.redirect('/signup?error=Invalid Shopify store URL. Use <storename>.myshopify.com');
+    }
+
+    // Check if the store already exists in the database
+    const existingTenant = await pool.query(
+      "SELECT id FROM tenants WHERE shopify_store_url = $1",
+      [refinedShopUrl]
+    );
+
+    if (existingTenant.rows.length > 0) {
+      return res.redirect('/signup?message=Shop already exists. Redirecting to login...');
+    }
+
+    // Proceed with new tenant registration
     const result = await pool.query(
       "INSERT INTO tenants (username, password, shopify_store_url, shopify_api_password) VALUES ($1, $2, $3, $4) RETURNING *",
-      [username, password, shopify_store_url, shopify_api_password]
+      [username, password, refinedShopUrl, shopify_api_password]
     );
+
     const tenant = result.rows[0];
+
     // Insert default email template for new tenant
     await pool.query(
       "INSERT INTO email_templates (tenant_id, design, html) VALUES ($1, $2, $3)",
       [tenant.id, JSON.stringify(defaultEmailTemplate.design), defaultEmailTemplate.html]
     );
-    res.redirect('/login');
+
+    res.redirect('/login?message=Account created successfully! Please log in.');
   } catch (err) {
     console.error(err);
-    res.status(500).send("Error signing up");
+    res.redirect('/signup?error=Error signing up. Please try again.');
   }
 });
 
@@ -592,6 +618,49 @@ app.post('/admin/api/smtp', ensureAuthenticated, async (req, res) => {
   }
 });
 
+// Verify SMTP connection
+
+
+app.post('/admin/api/smtp/test', ensureAuthenticated, async (req, res) => {
+  try {
+    // Get SMTP settings from the database
+    const tenantId = req.session.tenant.id;
+    const result = await pool.query(
+      "SELECT host, port, smtp_user AS user, pass FROM smtp_settings WHERE tenant_id = $1",
+      [tenantId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ success: false, message: "No SMTP settings found." });
+    }
+
+    const { host, port, user, pass } = result.rows[0];
+
+    // Create a transporter for connection testing
+    const transporter = nodemailer.createTransport({
+      host: host,
+      port: port,
+      secure: port == 465, // True for SSL (port 465), false otherwise
+      auth: { user, pass }
+    });
+
+    // Verify connection without sending an email
+    transporter.verify((error, success) => {
+      if (error) {
+        console.error("SMTP Connection Failed:", error);
+        return res.status(500).json({ success: false, message: "SMTP connection failed.", error: error.message });
+      }
+      console.log("SMTP Connection Successful!");
+      return res.json({ success: true, message: "SMTP connection successful!" });
+    });
+
+  } catch (error) {
+    console.error("SMTP Test Error:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error", error: error.message });
+  }
+});
+
+
 // ---------- File Upload & Assets API (Protected) ----------
 // Instead of using local persistent directories, we now use S3.
 // Endpoint: Upload a file to S3 and save its metadata to the assets table.
@@ -703,28 +772,69 @@ app.get('/api/products', ensureAuthenticated, async (req, res) => {
   }
 });
 
-// Endpoint: Attach an S3 file to a Shopify product as a metafield.
+// Endpoint: Attach an S3 file to a Shopify product as a metafield, supporting multiple assets
 app.post('/api/attach-file', ensureAuthenticated, async (req, res) => {
-  let { productId, fileUrl } = req.body;
+  let { productId, fileUrls } = req.body;
   try {
     const tenant = req.session.tenant;
     
-    // If fileUrl is an object, extract the s3_key.
-    if (typeof fileUrl === 'object' && fileUrl.s3_key) {
-      fileUrl = fileUrl.s3_key;
+    // Ensure fileUrls is an array
+    if (!Array.isArray(fileUrls)) {
+      fileUrls = [fileUrls];
     }
-    // Optionally, if fileUrl contains any unwanted prefix, remove it.
-    if (typeof fileUrl === 'string' && fileUrl.startsWith("uploads/")) {
-      fileUrl = fileUrl.replace(/^uploads\//, '');
+    
+    // Process each asset URL
+    fileUrls = fileUrls.map(url => {
+      // If the item is an object, extract its s3_key
+      if (typeof url === 'object' && url.s3_key) {
+        url = url.s3_key;
+      }
+      // Remove the unwanted prefix if present
+      if (typeof url === 'string' && url.startsWith("uploads/")) {
+        url = url.replace(/^uploads\//, '');
+      }
+      return url;
+    });
+    
+    // Fetch existing metafields for the product
+    const metafieldsRes = await axios.get(`https://${tenant.shopify_store_url}/admin/api/2024-01/products/${productId}/metafields.json`, {
+      headers: {
+        'X-Shopify-Access-Token': tenant.shopify_api_password,
+        'Content-Type': 'application/json'
+      }
+    });
+    const metafields = metafieldsRes.data.metafields;
+    let digitalField = metafields.find(field => field.namespace === 'digital_download' && field.key === 'digital_file');
+    
+    let newValue;
+    if (digitalField) {
+      try {
+        // Attempt to parse the existing value as JSON
+        const currentArray = JSON.parse(digitalField.value);
+        if (Array.isArray(currentArray)) {
+          newValue = JSON.stringify([...currentArray, ...fileUrls]);
+        } else {
+          newValue = JSON.stringify([digitalField.value, ...fileUrls]);
+        }
+      } catch (e) {
+        // If parsing fails, assume a comma-separated string and convert it
+        const currentArray = digitalField.value.split(',').map(s => s.trim()).filter(s => s);
+        newValue = JSON.stringify([...currentArray, ...fileUrls]);
+      }
+    } else {
+      // No existing metafield: create one with the array of fileUrls
+      newValue = JSON.stringify(fileUrls);
     }
-    // Now fileUrl should be a string (the S3 key, e.g. "tenantId/filename")
+    
+    // Update (or create) the metafield on the product.
+    // We set the metafield type to "json_string" so that Shopify treats the value as JSON.
     const response = await axios.put(`https://${tenant.shopify_store_url}/admin/api/2024-01/products/${productId}.json`, {
       product: {
         id: productId,
         metafields: [{
           key: "digital_file",
-          value: fileUrl,
-          type: "string",
+          value: newValue,
+          type: "json_string",
           namespace: "digital_download"
         }]
       }
@@ -734,7 +844,9 @@ app.post('/api/attach-file', ensureAuthenticated, async (req, res) => {
         'Content-Type': 'application/json'
       }
     });
+    
     res.json(response.data);
+    
   } catch (error) {
     console.error("Error attaching file to product:", error.response?.data || error.message);
     res.status(500).json({ error: 'Error attaching file to product' });
@@ -758,17 +870,48 @@ app.post('/admin/api/order', ensureAuthenticated, async (req, res) => {
   }
 });
 
-// Get orders for current tenant
+// Get all orders for the current tenant
 app.get('/admin/api/orders', ensureAuthenticated, async (req, res) => {
   const tenantId = req.session.tenant.id;
   try {
-    const result = await pool.query("SELECT * FROM orders WHERE tenant_id = $1 ORDER BY ordered_date DESC", [tenantId]);
+    const result = await pool.query(
+      "SELECT * FROM orders WHERE tenant_id = $1 ORDER BY ordered_date DESC",
+      [tenantId]
+    );
     res.json({ orders: result.rows });
-  } catch(err) {
+  } catch (err) {
     console.error(err);
     res.status(500).json({ error: "DB error" });
   }
 });
+// Get orders based on filter (last 24 hours, 7 days, or 30 days)
+app.get('/admin/api/orders/filter', ensureAuthenticated, async (req, res) => {
+  const tenantId = req.session.tenant.id;
+  const { period } = req.query; // Get filter from query params (e.g., ?period=7)
+
+  let dateRangeQuery = "";
+
+  if (period === "24") {
+    dateRangeQuery = "AND ordered_date >= NOW() - INTERVAL '1 day'";
+  } else if (period === "7") {
+    dateRangeQuery = "AND ordered_date >= NOW() - INTERVAL '7 days'";
+  } else if (period === "30") {
+    dateRangeQuery = "AND ordered_date >= NOW() - INTERVAL '30 days'";
+  }
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM orders WHERE tenant_id = $1 ${dateRangeQuery} ORDER BY ordered_date DESC`,
+      [tenantId]
+    );
+    res.json({ orders: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "DB error" });
+  }
+});
+
+
 
 // ---------- In-Memory Delivery & Download Endpoints (Public) ----------
 const downloadTokens = {}; // For production, consider persisting these tokens in your DB.
@@ -779,37 +922,55 @@ function generateDownloadToken(orderId, fileUrl) {
     orderId,
     fileUrl,
     expires: Date.now() + 31536000000, // 1 year in milliseconds
-    downloadsLeft: 3
+    downloadsLeft: 100
   };
   return token;
+  
 }
 
 
-app.get('/download/:token', async (req, res) => {
-  const tokenData = downloadTokens[req.params.token];
-  console.log("Download token data:", tokenData);
-  if (!tokenData) return res.status(404).send('Invalid download link.');
-  if (Date.now() > tokenData.expires) return res.status(403).send('Download link expired.');
-  if (tokenData.downloadsLeft <= 0) return res.status(403).send('Download limit exceeded.');
-  
-  // Decrement the downloadsLeft counter
-  tokenData.downloadsLeft--;
 
-  // If fileUrl is a full URL, redirect to it.
-  if (tokenData.fileUrl.startsWith('http')) {
-    return res.redirect(tokenData.fileUrl);
+
+
+app.get('/download/:token', async (req, res) => {
+  const tokenParam = req.params.token;
+  // Query the DB for token data; adjust table/column names as needed.
+  const result = await pool.query(
+    "SELECT file_url, tenant_id FROM order_downloads WHERE token = $1",
+    [tokenParam]
+  );
+  if (result.rows.length === 0) {
+    return res.status(404).send('Invalid download link.');
+  }
+  const tokenData = result.rows[0];
+  // if (Date.now() > new Date(tokenData.expires).getTime()) {
+  //   return res.status(403).send('Download link expired.');
+  // }
+  // if (tokenData.downloads_left <= 0) {
+  //   return res.status(403).send('Download limit exceeded.');
+  // }
+  // Decrement downloads_left in the DB.
+  // await pool.query(
+  //   "UPDATE order_downloads SET downloads_left = downloads_left - 1 WHERE token = $1",
+  //   [tokenParam]
+  // );
+  // await pool.query(
+  //   "INSERT INTO activity_logs (tenant_id, event_type, message) VALUES ($1, $2, $3)",
+  //   [tenant_id.id, 'Download Initiated', `Customer initiated download for token: ${req.params.token}`]
+  // );
+
+  // Serve the file: if file_url is a full URL, redirect; else stream from S3.
+  if (tokenData.file_url.startsWith('http')) {
+    return res.redirect(tokenData.file_url);
   } else {
-    // Otherwise, assume fileUrl is an S3 key; stream the file from S3.
     const command = new GetObjectCommand({
       Bucket: process.env.AWS_BUCKET_NAME,
-      Key: tokenData.fileUrl, // This is the S3 key, e.g. "tenantId/filename"
+      Key: tokenData.file_url,
     });
     try {
       const data = await s3Client.send(command);
-      // Set Content-Disposition to trigger a download, using the filename part of the key.
-      const filename = tokenData.fileUrl.split('/').pop();
+      const filename = tokenData.file_url.split('/').pop();
       res.attachment(filename);
-      // data.Body is a stream; pipe it to the response.
       data.Body.pipe(res);
     } catch (err) {
       console.error("Error fetching file from S3:", err);
@@ -817,23 +978,77 @@ app.get('/download/:token', async (req, res) => {
     }
   }
 });
+
+
+  
+
 // ---------- Improved Custom Order Delivery Page (Public) ----------
 const orderDeliveries = {};
-app.get('/orders/:orderId', (req, res) => {
+
+// ---------- GET Order Delivery Page (Public) ----------
+app.get('/orders/:orderId', async (req, res) => {
   const orderId = req.params.orderId;
-  const deliveries = orderDeliveries[orderId];
-  if (!deliveries || deliveries.length === 0) {
+  let result = await pool.query(
+    "SELECT product_id, product_name, file_url, token FROM order_downloads WHERE order_number = $1",
+    [orderId]
+  );
+  // If no records are found by short order number, try using big order id.
+  if (result.rows.length === 0) {
+    result = await pool.query(
+      "SELECT product_id, product_name, file_url, token FROM order_downloads WHERE big_order_id = $1",
+      [orderId]
+    );
+  }
+
+  if (result.rows.length === 0) {
     return res.status(404).send('No digital products found for this order.');
   }
-  let productsHtml = deliveries.map((item) => {
+
+  // Group rows by product_id so that one card is created per product.
+  const groupedProducts = {};
+  result.rows.forEach(item => {
+    if (!groupedProducts[item.product_id]) {
+      groupedProducts[item.product_id] = {
+        product_name: item.product_name,
+        assets: []
+      };
+    }
+    groupedProducts[item.product_id].assets.push({
+      file_url: item.file_url,
+      token: item.token
+    });
+  });
+
+  // Generate HTML: one card per product with each asset having a small download icon button and file name.
+  const productsHtml = Object.values(groupedProducts).map(product => {
+    const assetsHtml = product.assets.map(asset => {
+      // Extract a clean file name from the file_url
+      const fileName = asset.file_url.split('/').pop();
+      return `
+        <div class="asset-item" style="display: flex; align-items: center; gap: 5px; margin-top: 5px;">
+          <button class="download-icon-btn" onclick="window.location.href='/download/${asset.token}'" title="Download">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
+          <span class="asset-filename" style="font-size: 13px; color: #64748b;">${fileName}</span>
+        </div>
+      `;
+    }).join('');
+
     return `
       <div class="product-card">
-        <h3>Product ID: ${item.productId}</h3>
-        <p>Click the button below to download your product.</p>
-        <button class="download-btn" onclick="window.location.href='/download/${item.token}'">Download</button>
+        <h3>${product.product_name}</h3>
+        <p>Your digital assets:</p>
+        <div class="asset-buttons">
+          ${assetsHtml}
+        </div>
       </div>
     `;
   }).join('');
+
   res.send(`
     <html>
       <head>
@@ -843,8 +1058,10 @@ app.get('/orders/:orderId', (req, res) => {
           .order-container { max-width: 800px; margin: 0 auto; padding: 20px; background: #fff; }
           .order-header { text-align: center; margin-bottom: 20px; }
           .product-card { border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
-          .download-btn { background: #28a745; color: #fff; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
-          .download-btn:hover { background: #218838; }
+          .download-icon-btn { background: none; border: none; cursor: pointer; }
+          .download-icon-btn svg { transition: transform 0.2s ease; }
+          .download-icon-btn:hover svg { transform: scale(1.2); }
+          .asset-buttons { margin-top: 10px; }
         </style>
       </head>
       <body>
@@ -877,6 +1094,18 @@ app.post('/webhook/order-created', async (req, res) => {
       return res.sendStatus(500);
     }
     const tenant = tenantResult.rows[0];
+
+    // --- NEW BLOCK: Check duplicate based on Big Order ID ---
+    const existingOrder = await pool.query(
+      "SELECT id FROM orders WHERE big_order_id = $1",
+      [order.id]
+    );
+    if (existingOrder.rows.length > 0) {
+      console.log("Duplicate order detected (big order id):", order.id);
+      return res.sendStatus(200);
+    }
+    // --- End duplicate check ---
+
     await Promise.all(order.line_items.map(async (item) => {
       const productId = item.product_id;
       let fileUrl = null;
@@ -891,9 +1120,7 @@ app.post('/webhook/order-created', async (req, res) => {
         const digitalFileField = metafields.find(field => field.namespace === 'digital_download' && field.key === 'digital_file');
         if (digitalFileField) {
           fileUrl = digitalFileField.value;
-          // For S3 files, fileUrl should be the S3 key. If it isn’t already in the expected format, adjust it.
           if (!fileUrl.includes('/')) {
-            // Assume fileUrl is just a filename; prefix with tenant id.
             fileUrl = `${tenant.id}/${fileUrl}`;
           }
         }
@@ -901,20 +1128,38 @@ app.post('/webhook/order-created', async (req, res) => {
         console.error("Error fetching metafields for product", productId, err.response?.data || err.message);
       }
       if (fileUrl) {
-        const token = generateDownloadToken(order.id, fileUrl);
-        if (!orderDeliveries[order.id]) orderDeliveries[order.id] = [];
-        orderDeliveries[order.id].push({ productId, token });
+        let assets;
+        try {
+          assets = JSON.parse(fileUrl);
+          if (!Array.isArray(assets)) {
+            assets = [fileUrl];
+          }
+        } catch (e) {
+          assets = [fileUrl];
+        }
+        for (const asset of assets) {
+          const token = generateDownloadToken(order.id, asset, tenant.id); // pass tenant.id too if needed
+          if (!orderDeliveries[order.id]) orderDeliveries[order.id] = [];
+          orderDeliveries[order.id].push({ productId, token });
+          await pool.query(
+            "INSERT INTO order_downloads (tenant_id, order_number, big_order_id, product_id, product_name, file_url, token) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            [tenant.id, order.order_number, order.id, productId, item.title, asset, token]
+          );
+        }
       }
+      
+      
     }));
-    const downloadLink = `${process.env.APP_BASE_URL}/orders/${order.id}`;
-    // Save order details extracted from payload:
+    // --- Build download link using the short order number for display, but support lookup by both ---
+    const downloadLink = `${process.env.APP_BASE_URL}/orders/${order.order_number}`;
+    // Save order details (persist both big and short order ids)
     const customerName = order.customer ? `${order.customer.first_name} ${order.customer.last_name}`.trim() : "";
     const customerEmail = order.email || "";
     const shopifyCustomerUrl = order.customer && order.customer.id ? `https://${tenant.shopify_store_url}/admin/customers/${order.customer.id}` : "";
     const latestDispatchedEmail = new Date();
     await pool.query(
-      "INSERT INTO orders (tenant_id, order_number, ordered_date, customer_name, customer_email, shopify_customer_url, latest_dispatched_email) VALUES ($1, $2, $3, $4, $5, $6, $7)",
-      [tenant.id, order.order_number, order.created_at, customerName, customerEmail, shopifyCustomerUrl, latestDispatchedEmail]
+      "INSERT INTO orders (tenant_id, order_number, big_order_id, ordered_date, customer_name, customer_email, shopify_customer_url, latest_dispatched_email) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+      [tenant.id, order.order_number, order.id, order.created_at, customerName, customerEmail, shopifyCustomerUrl, latestDispatchedEmail]
     );
     const templateResult = await pool.query(
       "SELECT html FROM email_templates WHERE tenant_id = $1",
@@ -937,6 +1182,11 @@ app.post('/webhook/order-created', async (req, res) => {
       "SELECT host, port, smtp_user as \"user\", pass FROM smtp_settings WHERE tenant_id = $1",
       [tenant.id]
     );
+    await pool.query(
+      "INSERT INTO activity_logs (tenant_id, event_type, message) VALUES ($1, $2, $3)",
+      [tenant.id, 'Email Sent', `Download email sent for order: ${order.order_number} to ${order.email}`]
+    );  
+    
     const smtpRow = smtpResult.rows[0];
     let smtpConfig = {
       host: smtpRow ? smtpRow.host : process.env.SMTP_HOST,
@@ -946,7 +1196,8 @@ app.post('/webhook/order-created', async (req, res) => {
         user: smtpRow ? smtpRow.user : process.env.SMTP_USER,
         pass: smtpRow ? smtpRow.pass : process.env.SMTP_PASS,
       },
-      tls: { rejectUnauthorized: false }
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 10000  // 10 seconds, for example
     };
     let transporter = nodemailer.createTransport(smtpConfig);
     await transporter.sendMail({
@@ -961,6 +1212,173 @@ app.post('/webhook/order-created', async (req, res) => {
   } catch (err) {
     console.error('Error processing order webhook:', err);
     res.sendStatus(500);
+  }
+
+});
+
+
+// --- New Activity ----//
+app.get('/admin/api/activity', ensureAuthenticated, async (req, res) => {
+  const tenantId = req.session.tenant.id;
+  try {
+    const result = await pool.query(
+      "SELECT event_type, message, created_at FROM activity_logs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 10",
+      [tenantId]
+    );
+    res.json({ activity: result.rows });
+  } catch (err) {
+    console.error("Error fetching activity logs:", err);
+    res.status(500).json({ error: "DB error" });
+  }
+});
+
+
+// New Route: Get Products with Digital Assets from the local Products table
+app.get('/api/products-with-assets', ensureAuthenticated, async (req, res) => {
+  const tenantId = req.session.tenant.id;
+  try {
+    const result = await pool.query(
+      `SELECT id, shopify_product_id, title, image, digital_asset
+       FROM products
+       WHERE tenant_id = $1 AND digital_asset IS NOT NULL
+       ORDER BY created_at DESC`,
+      [tenantId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching products with digital assets:", err);
+    res.status(500).json({ error: "DB error" });
+  }
+});
+
+
+// New Route: Refresh Products with Digital Assets from Shopify and update local DB
+app.get('/admin/api/refresh-products', ensureAuthenticated, async (req, res) => {
+  try {
+    const tenant = req.session.tenant;
+    const shopDomain = tenant.shopify_store_url; // e.g., "your-store.myshopify.com"
+    const apiVersion = '2023-07'; // Adjust if needed
+    const accessToken = tenant.shopify_api_password; // Your admin API token
+
+    // Helper function to fetch all products with pagination
+    async function fetchAllProducts() {
+      let products = [];
+      let url = `https://${shopDomain}/admin/api/${apiVersion}/products.json?limit=250`;
+      while (url) {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json'
+          }
+        });
+        const data = await response.json();
+        products = products.concat(data.products);
+        url = data.next_page_url || null;
+      }
+      return products;
+    }
+
+    // Helper function to fetch metafields for a given product
+    async function fetchMetafieldsForProduct(productId) {
+      const response = await fetch(`https://${shopDomain}/admin/api/${apiVersion}/products/${productId}/metafields.json`, {
+        method: 'GET',
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json'
+        }
+      });
+      return response.json();
+    }
+
+    // Fetch all products from Shopify
+    const products = await fetchAllProducts();
+
+    // For each product, fetch its metafields to check for a digital asset
+    const upsertPromises = products.map(async (product) => {
+      let digitalAsset = null;
+      try {
+        const metafieldsData = await fetchMetafieldsForProduct(product.id);
+        const digitalDownloadMetafield = metafieldsData.metafields.find(
+          m => m.namespace === "digital_download" && m.key === "digital_file"
+        );
+        if (digitalDownloadMetafield) {
+          digitalAsset = digitalDownloadMetafield.value;
+        }
+      } catch (err) {
+        console.error(`Error fetching metafields for product ${product.id}:`, err);
+      }
+      
+      const imageUrl = product.image ? product.image.src : null;
+      
+      // Upsert into the local products table
+      await pool.query(
+        `INSERT INTO products (tenant_id, shopify_product_id, title, image, digital_asset)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (tenant_id, shopify_product_id)
+         DO UPDATE SET title = EXCLUDED.title,
+                       image = EXCLUDED.image,
+                       digital_asset = EXCLUDED.digital_asset,
+                       updated_at = NOW()`,
+        [tenant.id, product.id, product.title, imageUrl, digitalAsset]
+      );
+    });
+    await Promise.all(upsertPromises);
+    res.json({ message: "Products refreshed successfully" });
+  } catch (err) {
+    console.error("Error refreshing products:", err);
+    res.status(500).json({ error: "Error refreshing products" });
+  }
+});
+
+
+
+// Delete assets
+// New Route: Delete Digital Asset Metafield for a Product
+app.delete('/api/delete-digital-asset', ensureAuthenticated, async (req, res) => {
+  const { productId } = req.body;
+  if (!productId) {
+    return res.status(400).json({ error: "Missing productId" });
+  }
+  
+  const tenant = req.session.tenant;
+  const shopDomain = tenant.shopify_store_url;
+  const apiVersion = '2023-07';  // Adjust if needed
+  const accessToken = tenant.shopify_api_password;
+  
+  try {
+    // 1. Fetch metafields for the product
+    const metafieldsRes = await axios.get(`https://${shopDomain}/admin/api/${apiVersion}/products/${productId}/metafields.json`, {
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json'
+      }
+    });
+    const metafields = metafieldsRes.data.metafields;
+    const targetField = metafields.find(m => m.namespace === 'digital_download' && m.key === 'digital_file');
+    
+    if (!targetField) {
+      return res.status(404).json({ error: 'Digital asset metafield not found' });
+    }
+    
+    // 2. Delete the metafield via Shopify API
+    await axios.delete(`https://${shopDomain}/admin/api/${apiVersion}/metafields/${targetField.id}.json`, {
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    // 3. Optionally update your local products table to remove the digital asset (set to null)
+    await pool.query(
+      "UPDATE products SET digital_asset = NULL WHERE shopify_product_id = $1 AND tenant_id = $2",
+      [productId, tenant.id]
+    );
+    
+    res.json({ message: 'Digital asset metafield deleted successfully' });
+  } catch (err) {
+    console.error("Error deleting digital asset metafield:", err.response?.data || err.message);
+    res.status(500).json({ error: 'Error deleting digital asset metafield' });
   }
 });
 

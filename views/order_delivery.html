@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order #{{orderNumber}} - Digital Delivery</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f8f9fa; margin: 0; padding: 0; }
+        .order-container { max-width: 700px; margin: 40px auto; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0px 2px 10px rgba(0,0,0,0.1); }
+        .order-header { text-align: center; margin-bottom: 20px; }
+        .product-card { display: flex; align-items: center; border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 8px; background: #fff; }
+        .product-image { width: 80px; height: 80px; object-fit: cover; border-radius: 6px; margin-right: 15px; }
+        .product-info { flex-grow: 1; }
+        .product-name { font-weight: bold; font-size: 16px; margin-bottom: 5px; }
+        .product-price { color: #28a745; font-size: 14px; }
+        .download-btn { background: #28a745; color: #fff; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-block; }
+        .download-btn:hover { background: #218838; }
+    </style>
+</head>
+<body>
+    <div class="order-container">
+        <div class="order-header">
+            <h1>Order {{orderNumber}}</h1>
+            <p>Your digital products are ready for download.</p>
+        </div>
+
+        {{{productsHtml}}} <!-- Injects the correctly formatted products -->
+    </div>
+</body>
+</html>
