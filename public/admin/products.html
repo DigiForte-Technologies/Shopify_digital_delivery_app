@@ -424,14 +424,16 @@
   try {
     const response = await fetch('/api/uploads');
     const data = await response.json();
-    // Prepare an array of option objects with value and label
+    
+    // Prepare an array of option objects with value (full s3_key) and label (clean filename)
     let choices = [];
     if (data.files && data.files.length > 0) {
       choices = data.files.map(file => ({
-        value: file['s3_key'],
-        label: file['s3_key']
+        value: file['s3_key'],  // Keep full S3 path as value
+        label: getCleanFileName(file['s3_key'])  // Display cleaned filename
       }));
     }
+
     // Update the Choices instance with the new list
     assetChoices.setChoices(choices, 'value', 'label', true);
   } catch (err) {
@@ -441,6 +443,7 @@
     hideLoading();
   }
 }
+
 
     
     // Attach asset to product (existing function)
