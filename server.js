@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 const path = require('path');
 const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
 
 
 // AWS SDK v3 and multer-s3-v3 for S3 integration
@@ -387,22 +388,20 @@ app.get('/signup', (req, res) => {
 });
 
 // Process Sign-Up – new tenants register their shop details
+
 app.post('/signup', async (req, res) => {
   let { username, password, shopify_store_url, shopify_api_password } = req.body;
 
   try {
-    // Ensure shopify_store_url is in proper <storename>.myshopify.com format
     let refinedShopUrl = shopify_store_url
-      .replace(/https?:\/\//, '') // Remove http:// or https://
-      .replace(/\/$/, '') // Remove trailing slash
-      .toLowerCase(); // Normalize to lowercase
+      .replace(/https?:\/\//, '') 
+      .replace(/\/$/, '') 
+      .toLowerCase(); 
 
-    // Check if the URL matches the expected Shopify format
     if (!/^[a-z0-9-]+\.myshopify\.com$/.test(refinedShopUrl)) {
       return res.redirect('/signup?error=Invalid Shopify store URL. Use <storename>.myshopify.com');
     }
 
-    // Check if the store already exists in the database
     const existingTenant = await pool.query(
       "SELECT id FROM tenants WHERE shopify_store_url = $1",
       [refinedShopUrl]
@@ -412,15 +411,17 @@ app.post('/signup', async (req, res) => {
       return res.redirect('/signup?message=Shop already exists. Redirecting to login...');
     }
 
-    // Proceed with new tenant registration
+    // Hash both passwords before storing
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedApiPassword = await bcrypt.hash(shopify_api_password, 10);
+
     const result = await pool.query(
       "INSERT INTO tenants (username, password, shopify_store_url, shopify_api_password) VALUES ($1, $2, $3, $4) RETURNING *",
-      [username, password, refinedShopUrl, shopify_api_password]
+      [username, hashedPassword, refinedShopUrl, hashedApiPassword]
     );
 
     const tenant = result.rows[0];
 
-    // Insert default email template for new tenant
     await pool.query(
       "INSERT INTO email_templates (tenant_id, design, html) VALUES ($1, $2, $3)",
       [tenant.id, JSON.stringify(defaultEmailTemplate.design), defaultEmailTemplate.html]
@@ -436,17 +437,25 @@ app.post('/signup', async (req, res) => {
 // Process Login
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
+
   try {
     const result = await pool.query(
-      "SELECT * FROM tenants WHERE username = $1 AND password = $2",
-      [username, password]
+      "SELECT * FROM tenants WHERE username = $1",
+      [username]
     );
+
     if (result.rows.length) {
-      req.session.tenant = result.rows[0];
-      res.redirect('/admin/home');
-    } else {
-      res.send("Invalid credentials");
+      const tenant = result.rows[0];
+
+      // Compare hashed password
+      const passwordMatch = await bcrypt.compare(password, tenant.password);
+      if (passwordMatch) {
+        req.session.tenant = tenant;
+        return res.redirect('/admin/home');
+      }
     }
+
+    res.send("Invalid credentials");
   } catch (err) {
     console.error(err);
     res.status(500).send("Database error");
