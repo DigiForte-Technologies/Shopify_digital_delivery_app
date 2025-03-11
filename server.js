@@ -1423,6 +1423,73 @@ app.get('/api/linked-products-count', ensureAuthenticated, async (req, res) => {
   }
 });
 
+
+// Get S3 key for linked products --//
+app.get('/api/get-linked-products', ensureAuthenticated, async (req, res) => {
+  res.setHeader('Content-Type', 'application/json');  // Explicitly set JSON header
+
+  const { s3_key } = req.query;
+  if (!s3_key) {
+    return res.status(400).json({ error: "Missing s3_key parameter" });
+  }
+
+  const tenantId = req.session.tenant.id;
+
+  try {
+    const result = await pool.query(
+      `SELECT id, shopify_product_id, title, image, digital_asset
+       FROM products
+       WHERE tenant_id = $1 AND digital_asset IS NOT NULL`,
+      [tenantId]
+    );
+
+    const linkedProducts = result.rows.filter(product => {
+      try {
+        const assets = JSON.parse(product.digital_asset);
+        return assets.includes(s3_key);
+      } catch (err) {
+        console.error("Error parsing digital_asset:", err);
+        return false;
+      }
+    });
+
+    res.status(200).json(linkedProducts);  // Ensure correct JSON response
+  } catch (err) {
+    console.error("Error fetching linked products:", err);
+    res.status(500).json({ error: "DB error" });
+  }
+});
+
+
+// ------- Detach assets ---------- //
+app.post('/api/detach-asset', ensureAuthenticated, async (req, res) => {
+  const { productId } = req.body;
+  if (!productId) {
+    return res.status(400).json({ error: "Missing productId" });
+  }
+
+  try {
+    // Call the existing function that removes the asset from Shopify
+    const deleteResponse = await fetch(`/api/delete-digital-asset`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productId })
+    });
+
+    const result = await deleteResponse.json();
+
+    if (deleteResponse.ok) {
+      return res.json({ message: "Asset detached successfully!" });
+    } else {
+      return res.status(500).json({ error: result.error || "Failed to detach asset" });
+    }
+  } catch (err) {
+    console.error("Error detaching asset:", err);
+    res.status(500).json({ message: "Error detaching asset" });
+  }
+});
+
+
 // ---------- Start the Server ----------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`App listening on port ${PORT}`));
