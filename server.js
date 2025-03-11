@@ -523,6 +523,33 @@ app.get('/admin/api/stats', ensureAuthenticated, async (req, res) => {
   }
 });
 
+/// ---------- API Endpoint for storage usage ----------- //
+app.get('/api/storage-usage', ensureAuthenticated, async (req, res) => {
+  const tenantId = req.session.tenant.id;
+  const MAX_STORAGE_BYTES = 1 * 1024 * 1024 * 1024; // 1 GB in bytes
+
+  try {
+    // Get total used storage from the assets table
+    const result = await pool.query(
+      "SELECT COALESCE(SUM(file_size), 0) AS total_used FROM assets WHERE tenant_id = $1",
+      [tenantId]
+    );
+
+    const totalUsed = parseInt(result.rows[0].total_used, 10) || 0;
+    const freeSpace = MAX_STORAGE_BYTES - totalUsed;
+
+    res.json({
+      totalUsed,
+      freeSpace,
+      usedPercentage: ((totalUsed / MAX_STORAGE_BYTES) * 100).toFixed(2),
+    });
+  } catch (err) {
+    console.error("Error calculating storage usage:", err);
+    res.status(500).json({ error: "Error fetching storage usage" });
+  }
+});
+
+
 // ---------- API Endpoints for Tenant Settings ---------- //
 
 // Email Template Endpoints – stored in email_templates table
@@ -590,7 +617,7 @@ app.get('/admin/api/smtp', ensureAuthenticated, async (req, res) => {
   try {
     const tenantId = req.session.tenant.id;
     const result = await pool.query(
-      "SELECT host, port, smtp_user as \"user\", pass FROM smtp_settings WHERE tenant_id = $1",
+      "SELECT host, port, smtp_user as \"user\", pass, from_address FROM smtp_settings WHERE tenant_id = $1",
       [tenantId]
     );
     res.json({ smtp: result.rows[0] || null });
@@ -603,21 +630,23 @@ app.get('/admin/api/smtp', ensureAuthenticated, async (req, res) => {
 app.post('/admin/api/smtp', ensureAuthenticated, async (req, res) => {
   try {
     const tenantId = req.session.tenant.id;
-    const { host, port, user, pass } = req.body;
+    const { host, port, user, pass, fromAddress } = req.body;
+    
     const result = await pool.query(
       "SELECT id FROM smtp_settings WHERE tenant_id = $1",
       [tenantId]
     );
+
     if (result.rows.length) {
       await pool.query(
-        "UPDATE smtp_settings SET host = $1, port = $2, smtp_user = $3, pass = $4, updated_at = NOW() WHERE tenant_id = $5",
-        [host, port, user, pass, tenantId]
+        "UPDATE smtp_settings SET host = $1, port = $2, smtp_user = $3, pass = $4, from_address = $5, updated_at = NOW() WHERE tenant_id = $6",
+        [host, port, user, pass, fromAddress, tenantId]
       );
       res.json({ message: 'SMTP settings updated successfully' });
     } else {
       await pool.query(
-        "INSERT INTO smtp_settings (tenant_id, host, port, smtp_user, pass) VALUES ($1, $2, $3, $4, $5)",
-        [tenantId, host, port, user, pass]
+        "INSERT INTO smtp_settings (tenant_id, host, port, smtp_user, pass, from_address) VALUES ($1, $2, $3, $4, $5, $6)",
+        [tenantId, host, port, user, pass, fromAddress]
       );
       res.json({ message: 'SMTP settings saved successfully' });
     }
@@ -632,10 +661,9 @@ app.post('/admin/api/smtp', ensureAuthenticated, async (req, res) => {
 
 app.post('/admin/api/smtp/test', ensureAuthenticated, async (req, res) => {
   try {
-    // Get SMTP settings from the database
     const tenantId = req.session.tenant.id;
     const result = await pool.query(
-      "SELECT host, port, smtp_user AS user, pass FROM smtp_settings WHERE tenant_id = $1",
+      "SELECT host, port, smtp_user AS user, pass, from_address FROM smtp_settings WHERE tenant_id = $1",
       [tenantId]
     );
 
@@ -643,9 +671,12 @@ app.post('/admin/api/smtp/test', ensureAuthenticated, async (req, res) => {
       return res.status(400).json({ success: false, message: "No SMTP settings found." });
     }
 
-    const { host, port, user, pass } = result.rows[0];
+    const { host, port, user, pass, from_address } = result.rows[0];
 
-    // Create a transporter for connection testing
+    if (!from_address) {
+      return res.status(400).json({ success: false, message: "From Address is missing in SMTP settings." });
+    }
+
     const transporter = nodemailer.createTransport({
       host: host,
       port: port,
@@ -653,14 +684,13 @@ app.post('/admin/api/smtp/test', ensureAuthenticated, async (req, res) => {
       auth: { user, pass }
     });
 
-    // Verify connection without sending an email
     transporter.verify((error, success) => {
       if (error) {
         console.error("SMTP Connection Failed:", error);
         return res.status(500).json({ success: false, message: "SMTP connection failed.", error: error.message });
       }
       console.log("SMTP Connection Successful!");
-      return res.json({ success: true, message: "SMTP connection successful!" });
+      return res.json({ success: true, message: `SMTP connection successful! Emails will be sent from ${from_address}` });
     });
 
   } catch (error) {
@@ -674,6 +704,8 @@ app.post('/admin/api/smtp/test', ensureAuthenticated, async (req, res) => {
 // Instead of using local persistent directories, we now use S3.
 // Endpoint: Upload a file to S3 and save its metadata to the assets table.
 // Endpoint: Upload a file to S3 and save its metadata to the assets table.
+const { HeadObjectCommand } = require('@aws-sdk/client-s3'); // Import AWS SDK v3 command
+
 app.post('/api/upload', ensureAuthenticated, uploadToS3.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'No file uploaded' });
@@ -681,20 +713,36 @@ app.post('/api/upload', ensureAuthenticated, uploadToS3.single('file'), async (r
   try {
     const tenantId = req.session.tenant.id;
     const s3Key = req.file.key;         // e.g. "tenantId/filename"
-    const fileUrl = req.file.location;   // The public URL returned by multer-s3-v3
-    const fileSize = req.file.size;
+    const fileUrl = req.file.location;  // The public URL returned by multer-s3-v3
+
+    let fileSize = req.file.size; // Multer may not always provide this
+
+    // If fileSize is missing, fetch from S3 metadata
+    if (!fileSize || isNaN(fileSize)) {
+      console.warn(`⚠️ Warning: File size is missing for ${s3Key}. Fetching from S3...`);
+
+      // Fetch metadata from S3
+      const headCommand = new HeadObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: s3Key
+      });
+      const s3Meta = await s3Client.send(headCommand);
+      fileSize = s3Meta.ContentLength || 0; // Get size from S3 metadata
+    }
 
     // Save file metadata into the assets table.
     const result = await pool.query(
       "INSERT INTO assets (tenant_id, s3_key, file_url, file_size) VALUES ($1, $2, $3, $4) RETURNING *",
       [tenantId, s3Key, fileUrl, fileSize]
     );
+
     res.json({ message: 'File uploaded successfully', asset: result.rows[0] });
   } catch (err) {
     console.error("Error saving asset metadata:", err);
     res.status(500).json({ message: "File uploaded but failed to save metadata" });
   }
 });
+
 
 // Endpoint: List uploaded files for the current tenant (by querying the assets table)
 app.get('/api/uploads', ensureAuthenticated, async (req, res) => {
@@ -853,7 +901,19 @@ app.post('/api/attach-file', ensureAuthenticated, async (req, res) => {
         'Content-Type': 'application/json'
       }
     });
-    
+// Make an internal request to refresh the product list
+try {
+  await fetch('http://localhost:3000/admin/api/refresh-products', {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  console.log("✅ Product list updated after attaching asset.");
+} catch (refreshErr) {
+  console.error("⚠️ Failed to refresh product list:", refreshErr.message);
+}
+
+
+
     res.json(response.data);
     
   } catch (error) {

@@ -485,6 +485,8 @@
     // Refresh product dropdown and product list
     loadProducts();
     loadProductsWithAssets();
+    // ✅ Trigger the refresh function to update the assets table immediately
+    refreshProducts(); 
   } catch (err) {
     console.error(err);
     alert('Error attaching asset. Please try again.');
