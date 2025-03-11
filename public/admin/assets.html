@@ -222,6 +222,130 @@
         padding: 24px;
       }
     }
+    /* Table Container */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 20px;
+}
+
+/* Table Styling */
+#assetsTable {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #f8f9fa; /* Light grayish background */
+  color: #374151; /* Dark gray text */
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 14px;
+}
+
+#assetsTable thead {
+  background-color: #e5e7eb; /* Lighter gray for the header */
+}
+
+#assetsTable th,
+#assetsTable td {
+  padding: 12px;
+  border-bottom: 1px solid #d1d5db; /* Border between rows */
+  text-align: left;
+}
+
+#assetsTable th {
+  font-weight: 600;
+}
+
+#assetsTable tbody tr:hover {
+  background-color: #eceff1; /* Slight hover effect */
+}
+
+#assetsTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Checkbox Styling */
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Buttons */
+.action-button {
+  background-color: #d1d5db; /* Muted gray */
+  color: #374151; /* Dark text */
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s ease-in-out;
+}
+
+.action-button:hover {
+  background-color: #bfc5cb; /* Slightly darker on hover */
+}
+
+.action-button.delete {
+  background-color: #e5e7eb; /* Lighter gray for delete */
+  color: #b91c1c; /* Muted red text */
+}
+
+.action-button.delete:hover {
+  background-color: #d1d5db; /* Darker gray */
+  color: #991b1b; /* Darker muted red */
+}
+
+/* Loading Spinner */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  visibility: hidden;
+  opacity: 0;
+  transition: visibility 0.3s, opacity 0.3s;
+}
+
+.loading-overlay.active {
+  visibility: visible;
+  opacity: 1;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #d1d5db;
+  border-top: 4px solid #6b7280;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Delete Button */
+.delete-button {
+  background: none;
+  border: none;
+  color: #b91c1c;
+  font-size: 14px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.delete-button:hover {
+  color: #991b1b;
+}
+
   </style>
 </head>
 <body class="dashboard-body">
@@ -345,9 +469,24 @@
         </button>
       </div>
 
-      <div class="files-grid" id="filesList">
-        <!-- Files will be populated here by JavaScript -->
-      </div>
+<!-- With this -->
+<div class="table-container">
+  <table id="assetsTable">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="selectAll"></th>
+        <th>Filename</th>
+        <th>Size</th>
+        <th>Created</th>
+        <th>Linked Products</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="assetsTableBody"></tbody>
+  </table>
+</div>
+
+<button id="deleteSelectedButton" class="action-button delete">Delete Selected</button>
       
       <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
@@ -523,69 +662,80 @@
     async function loadAssets() {
   showLoading();
   try {
-    const response = await fetch('/api/uploads');
-    const data = await response.json();
+    const [uploadsResponse, linkedProductsResponse] = await Promise.all([
+      fetch('/api/uploads'),
+      fetch('/api/linked-products-count')
+    ]);
 
-    const filesList = document.getElementById('filesList');
-    filesList.innerHTML = '';
+    const data = await uploadsResponse.json();
+    const linkedProductsData = await linkedProductsResponse.json();
+    const linkedCounts = linkedProductsData.assetCounts || {};
+
+    const assetsTableBody = document.getElementById('assetsTableBody');
+    assetsTableBody.innerHTML = '';
 
     if (data.files && data.files.length > 0) {
-      data.files.forEach(file => {
-        console.log(file)
-        const mockSize = Math.floor(Math.random() * 10000000);
-        const fileCard = document.createElement('div');
-        fileCard.className = 'file-card';
-        fileCard.innerHTML = `
-          <div class="file-icon">
-            ${getFileIcon(file)}
-          </div>
-          <div class="file-details">
-            <h3 class="file-name">${getCleanFileName(file['s3_key'])}</h3>
-            <p class="file-meta">${formatFileSize(mockSize)}</p>
-          </div>
-          <div class="file-actions">
-            <div class="file-action" title="Download" onclick="window.location.href='/api/download/${file['s3_key']}'">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="7 10 12 15 17 10"></polyline>
-                <line x1="12" y1="15" x2="12" y2="3"></line>
-              </svg>
-            </div>
-            <div class="file-action delete" title="Delete" onclick="deleteFile('${file['s3_key']}')">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                <line x1="10" y1="11" x2="10" y2="17"></line>
-                <line x1="14" y1="11" x2="14" y2="17"></line>
-              </svg>
-            </div>
-          </div>
+      data.files.forEach((file) => {
+        const cleanFileName = getCleanFileName(file.s3_key);
+        const linkedProductsCount = linkedCounts[file.s3_key] || 0;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td><input type="checkbox" class="assetCheckbox" data-s3key="${file.s3_key}"></td>
+          <td>${cleanFileName}</td>
+          <td>${formatFileSize(file.file_size)}</td>
+          <td>${new Date(file.uploaded_at).toLocaleString()}</td>
+          <td>${linkedProductsCount}</td>
+          <td>
+            <button class="delete-button" onclick="deleteFile('${file.s3_key}')">Delete</button>
+          </td>
         `;
-        
-        filesList.appendChild(fileCard);
+        assetsTableBody.appendChild(row);
       });
     } else {
-      filesList.innerHTML = `
-        <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #94a3b8;">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style="margin: 0 auto 16px;">
-            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
-            <polyline points="13 2 13 9 20 9"></polyline>
-          </svg>
-          <p>No files uploaded yet. Upload your first file above.</p>
-        </div>
-      `;
+      assetsTableBody.innerHTML = `<tr><td colspan="6" style="text-align: center;">No files uploaded yet.</td></tr>`;
     }
   } catch (err) {
-    console.error(err);
-    document.getElementById('filesList').innerHTML = `
-      <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: #ef4444;">
-        <p>Error loading files. Please try refreshing.</p>
-      </div>
-    `;
+    console.error("Error loading assets:", err);
+    alert("Error fetching assets. Please try again.");
   } finally {
     hideLoading();
   }
 }
+
+
+// Bulk delete selected files
+document.getElementById('deleteSelectedButton').addEventListener('click', async function() {
+  const selectedFiles = document.querySelectorAll('.assetCheckbox:checked');
+  if (selectedFiles.length === 0) {
+    alert("Please select at least one file to delete.");
+    return;
+  }
+
+  if (!confirm(`Are you sure you want to delete ${selectedFiles.length} files?`)) return;
+
+  showLoading();
+  try {
+    for (let checkbox of selectedFiles) {
+      const s3Key = checkbox.dataset.s3key;
+      await fetch(`/api/delete-asset?s3_key=${s3Key}`, { method: 'DELETE' });
+    }
+    alert("Selected files deleted successfully.");
+    loadAssets();
+  } catch (err) {
+    console.error("Error deleting assets:", err);
+    alert("Error deleting files. Please try again.");
+  } finally {
+    hideLoading();
+  }
+});
+
+// Select/Deselect all checkboxes
+document.getElementById('selectAll').addEventListener('change', function() {
+  const checkboxes = document.querySelectorAll('.assetCheckbox');
+  checkboxes.forEach(checkbox => checkbox.checked = this.checked);
+});
+
 
     
     // Delete file

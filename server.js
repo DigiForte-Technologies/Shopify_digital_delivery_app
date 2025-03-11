@@ -1390,6 +1390,38 @@ app.delete('/api/delete-digital-asset', ensureAuthenticated, async (req, res) =>
     res.status(500).json({ error: 'Error deleting digital asset metafield' });
   }
 });
+// ----- Linked product assets ----//
+
+app.get('/api/linked-products-count', ensureAuthenticated, async (req, res) => {
+  const tenantId = req.session.tenant.id;
+  try {
+    const result = await pool.query(
+      `SELECT digital_asset FROM products WHERE tenant_id = $1`,
+      [tenantId]
+    );
+
+    const assetCounts = {};
+
+    // Iterate through all products and count asset occurrences
+    result.rows.forEach((row) => {
+      if (row.digital_asset) {
+        try {
+          const assetList = JSON.parse(row.digital_asset);
+          assetList.forEach((asset) => {
+            assetCounts[asset] = (assetCounts[asset] || 0) + 1;
+          });
+        } catch (error) {
+          console.error("Error parsing digital_asset:", error);
+        }
+      }
+    });
+
+    res.json({ assetCounts });
+  } catch (err) {
+    console.error("Error fetching linked product counts:", err);
+    res.status(500).json({ error: "Error fetching linked product counts" });
+  }
+});
 
 // ---------- Start the Server ----------
 const PORT = process.env.PORT || 3000;
