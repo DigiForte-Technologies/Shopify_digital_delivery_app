@@ -9,6 +9,8 @@ const axios = require('axios');
 const path = require('path');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+
 
 
 // AWS SDK v3 and multer-s3-v3 for S3 integration
@@ -65,6 +67,8 @@ const uploadToS3 = multer({
 
 // ---------- Default Email Template ----------
 const defaultEmailTemplate = {
+
+design: {
   "counters": {
     "u_column": 2,
     "u_row": 2,
@@ -346,6 +350,7 @@ const defaultEmailTemplate = {
         "htmlClassNames": "u_body"
       }
     }
+  }
   },
   "schemaVersion": 18,
 
@@ -369,8 +374,14 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'secret-key',
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // send only over HTTPS in production
+    sameSite: 'none', // allow cross-site cookies
+    maxAge: 24 * 60 * 60 * 1000, // 1 day, adjust as needed
+  }
 }));
+
 
 // Serve static CSS and public files
 app.use('/css', express.static(path.join(__dirname, 'public/css')));
@@ -386,6 +397,48 @@ app.get('/login', (req, res) => {
 app.get('/signup', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'signup.html'));
 });
+
+
+
+// Automatic SSO route: accepts shop and token as query parameters.
+// External SSO route in your external app (server.js)
+app.get('/external/sso', async (req, res) => {
+  const { shop, token } = req.query;
+  if (!shop || !token) {
+    return res.status(400).send("Missing shop or token parameters.");
+  }
+  
+  try {
+    // Verify the incoming token
+    const payload = jwt.verify(token, process.env.SSO_SECRET || "yourSuperSecretKeyForSSO");
+    if (payload.shop !== shop) {
+      return res.status(403).send("Invalid token.");
+    }
+    
+    // Fetch the tenant from your DB using the shop URL
+    const result = await pool.query(
+      "SELECT * FROM tenants WHERE shopify_store_url = $1",
+      [shop]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).send("Tenant not found.");
+    }
+    
+    const tenant = result.rows[0];
+    // Instead of comparing passwords, we trust the token. So simply create a session.
+    req.session.tenant = tenant;
+    req.session.save(() => {
+      // Redirect the user to the external dashboard directly
+      return res.redirect('/admin/home');
+    });
+  } catch (error) {
+    console.error("SSO Error:", error);
+    return res.status(403).send("Invalid or expired token.");
+  }
+});
+
+
+
 
 // Process Sign-Up – new tenants register their shop details
 
@@ -413,11 +466,11 @@ app.post('/signup', async (req, res) => {
 
     // Hash both passwords before storing
     const hashedPassword = await bcrypt.hash(password, 10);
-    const hashedApiPassword = await bcrypt.hash(shopify_api_password, 10);
+    // const hashedApiPassword = await bcrypt.hash(shopify_api_password, 10);
 
     const result = await pool.query(
       "INSERT INTO tenants (username, password, shopify_store_url, shopify_api_password) VALUES ($1, $2, $3, $4) RETURNING *",
-      [username, hashedPassword, refinedShopUrl, hashedApiPassword]
+      [username, hashedPassword, refinedShopUrl, shopify_api_password]
     );
 
     const tenant = result.rows[0];
@@ -1054,98 +1107,119 @@ app.get('/download/:token', async (req, res) => {
 // ---------- Improved Custom Order Delivery Page (Public) ----------
 const orderDeliveries = {};
 
-// ---------- GET Order Delivery Page (Public) ----------
-app.get('/orders/:orderId', async (req, res) => {
+
+// API Route: Fetch Order Details (Public)
+app.get('/api/orders/:orderId', async (req, res) => {
   const orderId = req.params.orderId;
-  let result = await pool.query(
-    "SELECT product_id, product_name, file_url, token FROM order_downloads WHERE order_number = $1",
-    [orderId]
-  );
-  // If no records are found by short order number, try using big order id.
-  if (result.rows.length === 0) {
-    result = await pool.query(
-      "SELECT product_id, product_name, file_url, token FROM order_downloads WHERE big_order_id = $1",
+
+  try {
+    let result = await pool.query(
+      `SELECT od.product_id, od.product_name, od.file_url, od.token, p.image AS product_image 
+       FROM order_downloads od
+       LEFT JOIN products p ON od.product_id = p.shopify_product_id
+       WHERE od.order_number = $1`, 
       [orderId]
     );
-  }
 
-  if (result.rows.length === 0) {
-    return res.status(404).send('No digital products found for this order.');
-  }
-
-  // Group rows by product_id so that one card is created per product.
-  const groupedProducts = {};
-  result.rows.forEach(item => {
-    if (!groupedProducts[item.product_id]) {
-      groupedProducts[item.product_id] = {
-        product_name: item.product_name,
-        assets: []
-      };
+    // If no records are found by short order number, try using big order id.
+    if (result.rows.length === 0) {
+      result = await pool.query(
+        `SELECT od.product_id, od.product_name, od.file_url, od.token, p.image AS product_image 
+         FROM order_downloads od
+         LEFT JOIN products p ON od.product_id = p.shopify_product_id
+         WHERE od.big_order_id = $1`, 
+        [orderId]
+      );
     }
-    groupedProducts[item.product_id].assets.push({
-      file_url: item.file_url,
-      token: item.token
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "No digital products found for this order." });
+    }
+
+    // Group rows by product_id so that one card is created per product.
+    const groupedProducts = {};
+    result.rows.forEach(item => {
+      if (!groupedProducts[item.product_id]) {
+        groupedProducts[item.product_id] = {
+          product_id: item.product_id,
+          product_name: item.product_name,
+          image: item.product_image || "/images/default-product.png", // Default image if none exists
+          assets: []
+        };
+      }
+
+      // **Ensure file URLs are always an array**
+      let fileUrls = [];
+      try {
+        fileUrls = JSON.parse(item.file_url); // Parse if stored as JSON array
+      } catch (e) {
+        fileUrls = item.file_url.includes(",") ? item.file_url.split(",") : [item.file_url]; // Split if comma-separated
+      }
+
+      fileUrls.forEach(url => {
+        groupedProducts[item.product_id].assets.push({
+          file_url: url.trim(),
+          token: item.token
+        });
+      });
     });
-  });
 
-  // Generate HTML: one card per product with each asset having a small download icon button and file name.
-  const productsHtml = Object.values(groupedProducts).map(product => {
-    const assetsHtml = product.assets.map(asset => {
-      // Extract a clean file name from the file_url
-      const fileName = asset.file_url.split('/').pop();
-      return `
-        <div class="asset-item" style="display: flex; align-items: center; gap: 5px; margin-top: 5px;">
-          <button class="download-icon-btn" onclick="window.location.href='/download/${asset.token}'" title="Download">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="7 10 12 15 17 10"></polyline>
-              <line x1="12" y1="15" x2="12" y2="3"></line>
-            </svg>
-          </button>
-          <span class="asset-filename" style="font-size: 13px; color: #64748b;">${fileName}</span>
-        </div>
-      `;
-    }).join('');
+    res.json(Object.values(groupedProducts));
 
-    return `
-      <div class="product-card">
-        <h3>${product.product_name}</h3>
-        <p>Your digital assets:</p>
-        <div class="asset-buttons">
-          ${assetsHtml}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  res.send(`
-    <html>
-      <head>
-        <title>Order ${orderId} - Digital Delivery</title>
-        <link rel="stylesheet" type="text/css" href="/css/style.css">
-        <style>
-          .order-container { max-width: 800px; margin: 0 auto; padding: 20px; background: #fff; }
-          .order-header { text-align: center; margin-bottom: 20px; }
-          .product-card { border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
-          .download-icon-btn { background: none; border: none; cursor: pointer; }
-          .download-icon-btn svg { transition: transform 0.2s ease; }
-          .download-icon-btn:hover svg { transform: scale(1.2); }
-          .asset-buttons { margin-top: 10px; }
-        </style>
-      </head>
-      <body>
-        <div class="order-container">
-          <div class="order-header">
-            <h1>Order #${orderId}</h1>
-            <p>Your digital products are ready to download.</p>
-          </div>
-          ${productsHtml}
-        </div>
-      </body>
-    </html>
-  `);
+  } catch (error) {
+    console.error("Error fetching order details:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
+// ----------- Support Modal -------------- //
+
+app.post('/api/support', async (req, res) => {
+  const { orderId, email, message } = req.body;
+
+  if (!email || !message) {
+    return res.status(400).json({ error: "Missing required fields." });
+  }
+
+  try {
+    // SMTP configuration
+    const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: process.env.SMTP_PORT,
+        secure: false, // Set to true if using port 465 (SSL)
+        auth: {
+            user: process.env.SMTP_USER, // Your verified SMTP email
+            pass: process.env.SMTP_PASS,
+        },
+        tls: {
+            rejectUnauthorized: false // Helps with some SMTP providers
+        }
+    });
+
+    // Email content
+    const mailOptions = {
+      from: `"Customer Support" <${process.env.SMTP_USER}>`, // Use your verified email
+      to: "info@codestream.ca", // Your support email
+      replyTo: email, // Customer's email goes here
+      subject: `Support Request - Order #${orderId}`,
+      text: `Order ID: ${orderId}\nCustomer Email: ${email}\n\nMessage:\n${message}`
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    res.json({ success: true, message: "Support request sent successfully!" });
+
+  } catch (error) {
+    console.error("Error sending support email:", error);
+    res.status(500).json({ error: "Internal server error. Could not send email." });
+  }
+});
+
+// ---------- GET Order Delivery Page (Public) ----------
+// Serve Order Delivery Page (Frontend)
+app.get('/orders/:orderId', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/order-delivery.html'));
+});
 // ---------- Shopify Order Webhook (Public) ----------
 app.post('/webhook/order-created', async (req, res) => {
   const order = req.body;

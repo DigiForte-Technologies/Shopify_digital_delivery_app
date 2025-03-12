@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order - Digital Delivery</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    /* General Page Styling */
+/* General Page Styling */
+body {
+  font-family: Arial, sans-serif;
+  background: #f9fafb;
+  margin: 0;
+  padding: 0;
+}
+
+/* Order Container */
+.order-container {
+  max-width: 800px;
+  margin: 50px auto;
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Order Header */
+.order-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.order-header h1 {
+  color: #1e293b;
+  font-size: 22px;
+}
+
+.order-header p {
+  color: #64748b;
+  font-size: 16px;
+}
+
+/* Product Card */
+.product-card {
+  display: flex;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+
+.product-card:hover {
+  transform: scale(1.02);
+}
+
+/* Product Image */
+.product-image {
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 15px;
+}
+
+.product-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+/* Product Info */
+.product-info {
+  flex-grow: 1;
+}
+
+.product-info h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #1e293b;
+}
+
+.asset-buttons {
+  margin-top: 10px;
+}
+
+/* Download Button */
+.asset-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.download-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.download-icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.download-icon-btn:hover svg {
+  transform: scale(1.2);
+}
+
+/* Floating 'Need Help?' Button */
+.support-btn {
+  position: fixed;
+  bottom: 15px;
+  right: 15px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: background 0.3s ease, transform 0.2s ease;
+  z-index: 1000;
+}
+
+.support-btn:hover {
+  background: #1d4ed8;
+  transform: scale(1.05);
+}
+
+/* Support Modal */
+.support-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  justify-content: center;
+  align-items: center;
+  z-index: 1001;
+}
+
+.support-modal.active {
+  display: flex;
+}
+
+/* Support Modal Content */
+.support-modal-content {
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  width: 90%;
+  max-width: 400px;
+  position: relative;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* Close Button */
+.close-modal {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  font-weight: bold;
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.close-modal:hover {
+  color: #1e293b;
+}
+
+/* Support Form */
+.support-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.support-form .form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.support-form label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 5px;
+}
+
+.support-form input,
+.support-form textarea {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 14px;
+  background: #fff;
+  transition: border-color 0.3s ease;
+  outline: none;
+}
+
+.support-form input:focus,
+.support-form textarea:focus {
+  border-color: #2563eb;
+}
+
+.support-form textarea {
+  height: 100px;
+  resize: vertical;
+}
+
+/* Send Button */
+.send-btn {
+  width: 100%;
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 12px;
+  font-size: 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.3s ease;
+}
+
+.send-btn:hover {
+  background: #1d4ed8;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+  .order-container {
+    padding: 15px;
+    margin: 20px auto;
+    max-width: 95%;
+  }
+
+  .product-card {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .product-image {
+    margin: 0 auto 10px auto;
+  }
+
+  .support-btn {
+    font-size: 12px;
+    padding: 8px 14px;
+  }
+
+  .support-modal-content {
+    width: 95%;
+  }
+
+  .support-form input,
+  .support-form textarea {
+    font-size: 16px;
+  }
+}
+  </style>
+</head>
+<body>
+
+  <div class="order-container">
+    <div class="order-header">
+      <h1>Order <span id="orderId"></span></h1>
+      <p>Your digital products are ready to download.</p>
+    </div>
+
+    <div id="productsContainer"></div>
+
+<!-- Floating Need Help Button -->
+<button class="support-btn" onclick="openSupportForm()">Need Help?</button>
+
+<!-- Support Modal -->
+<div class="support-modal" id="supportModal">
+  <div class="support-modal-content">
+    <button class="close-modal" onclick="closeSupportForm()">✖</button>
+    <h2>Contact Support</h2>
+    <form id="supportForm">
+      <div class="form-group">
+        <label for="supportEmail">Your Email</label>
+        <input type="email" id="supportEmail" placeholder="Enter your email" required>
+      </div>
+
+      <div class="form-group">
+        <label for="supportOrderId">Order Number</label>
+        <input type="text" id="supportOrderId" readonly>
+      </div>
+
+      <div class="form-group">
+        <label for="supportMessage">Describe Your Issue</label>
+        <textarea id="supportMessage" placeholder="Describe your issue..." required></textarea>
+      </div>
+
+      <button type="submit" class="send-btn">Send Message</button>
+    </form>
+  </div>
+</div>
+
+
+  <script>
+    const orderId = new URLSearchParams(window.location.search).get('orderId');
+    document.getElementById('orderId').textContent = orderId;
+
+    async function fetchOrderData() {
+  const orderId = new URL(window.location.href).pathname.split('/').pop();
+  document.getElementById('orderId').textContent = orderId;
+
+  try {
+    const response = await fetch(`/api/orders/${orderId}`);
+    if (!response.ok) {
+      throw new Error("Order not found");
+    }
+
+    const data = await response.json();
+    const productsContainer = document.getElementById('productsContainer');
+
+    function getCleanFileName(s3Key) {
+      // Remove folder prefix
+      let filePart = s3Key.includes('/') ? s3Key.split('/').slice(1).join('/') : s3Key;
+      // Remove timestamp parts: assume numeric parts are timestamps
+      const parts = filePart.split('-');
+      const nonNumericParts = parts.filter(part => isNaN(part));
+      return nonNumericParts.join('-');
+    }
+
+    productsContainer.innerHTML = data.map(product => `
+      <div class="product-card">
+        <div class="product-image">
+          <img src="${product.image}" alt="${product.product_name}">
+        </div>
+        <div class="product-info">
+          <h3>${product.product_name}</h3>
+          <p>Your digital assets:</p>
+          <div class="asset-buttons">
+            ${product.assets.map(asset => `
+              <div class="asset-item">
+                <button class="download-icon-btn" onclick="window.location.href='/download/${asset.token}'" title="Download">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                  </svg>
+                </button>
+                <span class="asset-filename">${getCleanFileName(asset.file_url)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+  } catch (error) {
+    console.error("Error fetching order data:", error);
+    document.getElementById('productsContainer').innerHTML = `<p style="color:red;">No digital products found for this order.</p>`;
+  }
+}
+
+// Load order details when page loads
+fetchOrderData();
+
+
+
+function openSupportForm() {
+  document.getElementById("supportModal").classList.add("active");
+
+  // Autofill order number if available
+  const orderId = new URL(window.location.href).pathname.split('/').pop();
+  document.getElementById("supportOrderId").value = orderId;
+}
+
+function closeSupportForm() {
+  document.getElementById("supportModal").classList.remove("active");
+}
+
+document.getElementById("supportForm").addEventListener("submit", async function(event) {
+  event.preventDefault();
+
+  const email = document.getElementById("supportEmail").value.trim();
+  const orderId = document.getElementById("supportOrderId").value;
+  const message = document.getElementById("supportMessage").value.trim();
+
+  if (!validateEmail(email)) {
+    alert("Please enter a valid email address.");
+    return;
+  }
+
+  await fetch('/api/support', {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ orderId, email, message })
+  });
+
+  alert("Support request sent!");
+  closeSupportForm();
+});
+
+function validateEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+  </script>
+
+</body>
+</html>
