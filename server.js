@@ -10,6 +10,8 @@ const path = require('path');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const pgSession = require("connect-pg-simple")(session);
+
 
 
 
@@ -371,16 +373,22 @@ design: {
 // ---------- Middleware & Session ----------
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'secret-key',
+  store: new pgSession({
+    pool: pool, 
+    tableName: "user_sessions", // Table for storing sessions
+  }),
+  secret: process.env.SESSION_SECRET || "superSecretKey",
   resave: false,
   saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production', // send only over HTTPS in production
-    sameSite: 'none', // allow cross-site cookies
-    maxAge: 24 * 60 * 60 * 1000, // 1 day, adjust as needed
-  }
+  // cookie: {
+  //   httpOnly: true,
+  //   secure: process.env.NODE_ENV === "production" || true, // HTTPS required for ngrok
+  //   sameSite: "None", // Required for cross-domain cookies
+  // }
 }));
+
 
 
 // Serve static CSS and public files
@@ -402,40 +410,46 @@ app.get('/signup', (req, res) => {
 
 // Automatic SSO route: accepts shop and token as query parameters.
 // External SSO route in your external app (server.js)
+// Automatic SSO route: accepts shop and token as query parameters.
 app.get('/external/sso', async (req, res) => {
   const { shop, token } = req.query;
   if (!shop || !token) {
     return res.status(400).send("Missing shop or token parameters.");
   }
-  
+
   try {
     // Verify the incoming token
     const payload = jwt.verify(token, process.env.SSO_SECRET || "yourSuperSecretKeyForSSO");
     if (payload.shop !== shop) {
       return res.status(403).send("Invalid token.");
     }
-    
+
     // Fetch the tenant from your DB using the shop URL
-    const result = await pool.query(
-      "SELECT * FROM tenants WHERE shopify_store_url = $1",
-      [shop]
-    );
+    const result = await pool.query("SELECT * FROM tenants WHERE shopify_store_url = $1", [shop]);
+
     if (result.rows.length === 0) {
       return res.status(404).send("Tenant not found.");
     }
-    
+
     const tenant = result.rows[0];
-    // Instead of comparing passwords, we trust the token. So simply create a session.
+
+    // Set session and ensure it's saved before redirecting
     req.session.tenant = tenant;
-    req.session.save(() => {
-      // Redirect the user to the external dashboard directly
-      return res.redirect('/admin/home');
+    req.session.save(err => {
+      if (err) {
+        console.error("Session save error:", err);
+        return res.status(500).send("Session error");
+      }
+      console.log("Session saved, redirecting...");
+      res.redirect('/admin/home');
     });
+
   } catch (error) {
     console.error("SSO Error:", error);
     return res.status(403).send("Invalid or expired token.");
   }
 });
+
 
 
 
@@ -490,6 +504,10 @@ app.post('/signup', async (req, res) => {
 // Process Login
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
+    // // Check if SSO token exists and try logging in
+    // if (req.session.tenant) {
+    //   return res.redirect('/admin/home');
+    // }
 
   try {
     const result = await pool.query(
@@ -1223,8 +1241,9 @@ app.get('/orders/:orderId', (req, res) => {
 // ---------- Shopify Order Webhook (Public) ----------
 app.post('/webhook/order-created', async (req, res) => {
   const order = req.body;
+  console.log(order);
   console.log('Received new order:', order.id);
-  const shopifyDomain = new URL(order.order_status_url).hostname;
+  const shopifyDomain = new URL(order.order_status_url).hostname || "No URL Provided";
   console.log("Extracted shopify domain:", shopifyDomain);
 
   try {
@@ -1294,7 +1313,7 @@ app.post('/webhook/order-created', async (req, res) => {
       
     }));
     // --- Build download link using the short order number for display, but support lookup by both ---
-    const downloadLink = `${process.env.APP_BASE_URL}/orders/${order.order_number}`;
+    const downloadLink = `${process.env.APP_BASE_URL}/orders/${order.id}`;
     // Save order details (persist both big and short order ids)
     const customerName = order.customer ? `${order.customer.first_name} ${order.customer.last_name}`.trim() : "";
     const customerEmail = order.email || "";
@@ -1357,6 +1376,7 @@ app.post('/webhook/order-created', async (req, res) => {
     res.sendStatus(500);
   }
 
+  
 });
 
 

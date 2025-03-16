@@ -116,135 +116,99 @@ body {
   transform: scale(1.2);
 }
 
-/* Floating 'Need Help?' Button */
-.support-btn {
-  position: fixed;
-  bottom: 15px;
-  right: 15px;
-  background: #2563eb;
-  color: white;
-  border: none;
-  padding: 10px 18px;
-  font-size: 14px;
-  font-weight: 600;
-  border-radius: 6px;
-  cursor: pointer;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  transition: background 0.3s ease, transform 0.2s ease;
-  z-index: 1000;
-}
+    /* Floating Help Button */
+    .support-btn {
+      position: fixed;
+      bottom: 15px;
+      right: 15px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      font-size: 14px;
+      border-radius: 50px;
+      cursor: pointer;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
 
-.support-btn:hover {
-  background: #1d4ed8;
-  transform: scale(1.05);
-}
+    .support-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      justify-content: center;
+      align-items: center;
+    }
 
-/* Support Modal */
-.support-modal {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.6);
-  justify-content: center;
-  align-items: center;
-  z-index: 1001;
-}
+    .support-modal.active {
+      display: flex;
+    }
 
-.support-modal.active {
-  display: flex;
-}
+    .support-modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      width: 90%;
+      max-width: 400px;
+      position: relative;
+      text-align: center;
+    }
 
-/* Support Modal Content */
-.support-modal-content {
-  background: white;
-  padding: 20px;
-  border-radius: 10px;
-  width: 90%;
-  max-width: 400px;
-  position: relative;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-}
+    .close-modal {
+      position: absolute;
+      top: 10px;
+      right: 15px;
+      font-size: 18px;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
 
-/* Close Button */
-.close-modal {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: none;
-  border: none;
-  font-size: 18px;
-  font-weight: bold;
-  color: #64748b;
-  cursor: pointer;
-  transition: color 0.3s ease;
-}
+    .support-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-top: 10px;
+    }
 
-.close-modal:hover {
-  color: #1e293b;
-}
+    .support-form input, .support-form textarea {
+      width: calc(100% - 20px);
+      padding: 12px;
+      margin: 0 auto;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
 
-/* Support Form */
-.support-form {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
+    .support-form textarea {
+      height: 120px;
+      resize: none;
+    }
 
-.support-form .form-group {
-  display: flex;
-  flex-direction: column;
-}
+    .send-btn {
+      width: 100%;
+      background: #2563eb;
+      color: white;
+      padding: 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: bold;
+    }
 
-.support-form label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1e293b;
-  margin-bottom: 5px;
-}
-
-.support-form input,
-.support-form textarea {
-  width: 100%;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 12px;
-  font-size: 14px;
-  background: #fff;
-  transition: border-color 0.3s ease;
-  outline: none;
-}
-
-.support-form input:focus,
-.support-form textarea:focus {
-  border-color: #2563eb;
-}
-
-.support-form textarea {
-  height: 100px;
-  resize: vertical;
-}
-
-/* Send Button */
-.send-btn {
-  width: 100%;
-  background: #2563eb;
-  color: white;
-  border: none;
-  padding: 12px;
-  font-size: 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background 0.3s ease;
-}
-
-.send-btn:hover {
-  background: #1d4ed8;
-}
-
+    @media (max-width: 768px) {
+      .order-container {
+        padding: 15px;
+        margin: 20px;
+      }
+      .support-modal-content {
+        width: 95%;
+      }
+    }
 /* Mobile Optimizations */
 @media (max-width: 768px) {
   .order-container {
@@ -261,20 +225,6 @@ body {
   .product-image {
     margin: 0 auto 10px auto;
   }
-
-  .support-btn {
-    font-size: 12px;
-    padding: 8px 14px;
-  }
-
-  .support-modal-content {
-    width: 95%;
-  }
-
-  .support-form input,
-  .support-form textarea {
-    font-size: 16px;
-  }
 }
   </style>
 </head>
@@ -288,35 +238,24 @@ body {
 
     <div id="productsContainer"></div>
 
-<!-- Floating Need Help Button -->
-<button class="support-btn" onclick="openSupportForm()">Need Help?</button>
+    <button class="support-btn" onclick="openSupportForm()">Need Help?</button>
 
-<!-- Support Modal -->
-<div class="support-modal" id="supportModal">
-  <div class="support-modal-content">
-    <button class="close-modal" onclick="closeSupportForm()">✖</button>
-    <h2>Contact Support</h2>
-    <form id="supportForm">
-      <div class="form-group">
-        <label for="supportEmail">Your Email</label>
-        <input type="email" id="supportEmail" placeholder="Enter your email" required>
+    <div class="support-modal" id="supportModal">
+      <div class="support-modal-content">
+        <button class="close-modal" onclick="closeSupportForm()">&times;</button>
+        <h2>Contact Support</h2>
+        <form id="supportForm" class="support-form">
+          <input type="email" id="supportEmail" placeholder="Your Email" required>
+          <input type="text" id="supportOrderId" readonly>
+          <textarea id="supportMessage" placeholder="Describe your issue..." required></textarea>
+          <button type="submit" class="send-btn">Send Message</button>
+        </form>
       </div>
-
-      <div class="form-group">
-        <label for="supportOrderId">Order Number</label>
-        <input type="text" id="supportOrderId" readonly>
-      </div>
-
-      <div class="form-group">
-        <label for="supportMessage">Describe Your Issue</label>
-        <textarea id="supportMessage" placeholder="Describe your issue..." required></textarea>
-      </div>
-
-      <button type="submit" class="send-btn">Send Message</button>
-    </form>
-  </div>
-</div>
-
+    </div>
+    <script>
+      function openSupportForm() { document.getElementById("supportModal").classList.add("active"); }
+      function closeSupportForm() { document.getElementById("supportModal").classList.remove("active"); }
+    </script>  
 
   <script>
     const orderId = new URLSearchParams(window.location.search).get('orderId');
